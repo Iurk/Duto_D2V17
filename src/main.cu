@@ -76,41 +76,24 @@ int main(int argc, char const *argv[]){
 	checkCudaErrors(cudaEventCreate(&start));
 	checkCudaErrors(cudaEventCreate(&stop));
 
-	// Declaration and Allocation of Input data in Device constant memory
-	unsigned int *ptrNx, *ptrNy;
-	double *ptrrho0, *ptru_max;
-	double *ptrNu;
-	const double *ptrTau;
+	// Allocation of Input data in Device constant memory
+	wrapper_input(&Nx, &Ny, &rho0, &u_max, &nu, &tau);
 
-	ptrNx = &Nx; ptrNy = &Ny;
-	ptrrho0 = &rho0; ptru_max = &u_max;
-	ptrNu = &nu; ptrTau = &tau;
-
-	wrapper_input(ptrNx, ptrNy, ptrrho0, ptru_max, ptrNu, ptrTau);
-
-	// Declaration and Allocation of Lattice data in Device constant and global memory
-	unsigned int *ptrNdir;
-	double *ptrcs, *ptrW0, *ptrWs, *ptrWd;
-
-	ptrNdir = &ndir; ptrcs = &cs; 
-	ptrW0 = &w0; ptrWs = &ws; ptrWd = &wd;
-
-	wrapper_lattice(ptrNdir, ptrcs, ptrW0, ptrWs, ptrWd);
+	// Allocation of Lattice data in Device constant and global memory
+	wrapper_lattice(&ndir, &cs, &w0, &ws, &wd);
 
 	int *ex_gpu, *ey_gpu;
 
 	ex_gpu = generate_e(ex, "x");
 	ey_gpu = generate_e(ey, "y");
 
-	bool *solid_p, *fluid_p;
-	bool *solid_gpu, *fluid_gpu;
+	bool *solid_p;
+	bool *solid_gpu;
 
-	solid_p = create_pinned_mesh(cylinder);
-	fluid_p = create_pinned_mesh(fluid);
+	solid_p = create_pinned_mesh(solid);
 
 	// Generating Mesh
 	solid_gpu = generate_mesh(solid_p, "solid");
-	fluid_gpu = generate_mesh(fluid_p, "fluid");
 
 	// Initialization
 	initialization(rho_gpu, rho0);
@@ -223,9 +206,7 @@ int main(int argc, char const *argv[]){
 
 	// Mesh arrays
 	checkCudaErrors(cudaFree(solid_gpu));
-	checkCudaErrors(cudaFree(fluid_gpu));
 	checkCudaErrors(cudaFreeHost(solid_p));
-	checkCudaErrors(cudaFreeHost(fluid_p));
 
 	// Host arrays
 	checkCudaErrors(cudaFreeHost(scalar_host));
