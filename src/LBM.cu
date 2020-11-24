@@ -27,8 +27,7 @@ __device__ int *ex_d;
 __device__ int *ey_d;
 
 // Mesh data
-__device__ bool *cylinder_d;
-__device__ bool *fluid_d;
+__device__ bool *solid_d;
 
 __device__ __forceinline__ size_t gpu_field0_index(unsigned int x, unsigned int y){
 	return Nx_d*y + x;
@@ -49,56 +48,18 @@ __global__ void gpu_print_mesh(int);
 __global__ void gpu_initialization(double*, double);
 
 // Boundary Conditions
-__device__ void gpu_zou_he_inlet(unsigned int x, unsigned int y, double *f0, double *f, double *f1,
-								double *f5, double *f8, double *r, double *u, double *v){
+__device__ void gpu_bounce_back(unsigned int x, unsigned int y, double *f){
+	
+	if(y == 0){
+		f[gpu_fieldn_index(x, y, 2)] = f[gpu_fieldn_index(x, y, 4)];
+		f[gpu_fieldn_index(x, y, 5)] = f[gpu_fieldn_index(x, y, 7)];
+		f[gpu_fieldn_index(x, y, 6)] = f[gpu_fieldn_index(x, y, 8)];
+	}
 
-	double ux = u_max_d;
-	double uy = 0;
-
-	unsigned int idx_0 = gpu_field0_index(x, y);
-	unsigned int idx_2 = gpu_fieldn_index(x, y, 2);
-	unsigned int idx_3 = gpu_fieldn_index(x, y, 3);
-	unsigned int idx_4 = gpu_fieldn_index(x, y, 4);
-	unsigned int idx_6 = gpu_fieldn_index(x, y, 6);
-	unsigned int idx_7 = gpu_fieldn_index(x, y, 7);
-
-	double rho = (f0[idx_0] + f[idx_2] + f[idx_4] + 2*(f[idx_3] + f[idx_6] + f[idx_7]))/(1.0 - ux);
-	*f1 = f[idx_3] + 2.0/3.0*rho*ux;
-	*f5 = f[idx_7] - 0.5*(f[idx_2] - f[idx_4]) + 1.0/6.0*rho*ux;
-	*f8 = f[idx_6] + 0.5*(f[idx_2] - f[idx_4]) + 1.0/6.0*rho*ux;
-
-	*r = rho;
-	*u = ux;
-	*v = uy;
-}
-
-__device__ void gpu_outflow(unsigned int x, unsigned int y, unsigned int x_before, unsigned int y_before, double *f0, double *f){
-
-	f0[gpu_field0_index(x, y)] = f0[gpu_field0_index(x_before, y_before)];
-	f[gpu_fieldn_index(x, y, 1)] = f[gpu_fieldn_index(x_before, y_before, 1)];
-	f[gpu_fieldn_index(x, y, 2)] = f[gpu_fieldn_index(x_before, y_before, 2)];
-	f[gpu_fieldn_index(x, y, 3)] = f[gpu_fieldn_index(x_before, y_before, 3)];
-	f[gpu_fieldn_index(x, y, 4)] = f[gpu_fieldn_index(x_before, y_before, 4)];
-	f[gpu_fieldn_index(x, y, 5)] = f[gpu_fieldn_index(x_before, y_before, 5)];
-	f[gpu_fieldn_index(x, y, 6)] = f[gpu_fieldn_index(x_before, y_before, 6)];
-	f[gpu_fieldn_index(x, y, 7)] = f[gpu_fieldn_index(x_before, y_before, 7)];
-	f[gpu_fieldn_index(x, y, 8)] = f[gpu_fieldn_index(x_before, y_before, 8)];
-
-}
-
-__device__ void gpu_bounce_back(unsigned int x, unsigned int y, double *f2){
-	unsigned int noslip[] = {0, 3, 4, 1, 2, 7, 8, 5, 6};
-
-	for(int n = 1; n < q; ++n){
-		unsigned int x_next = x + ex_d[n];
-		unsigned int y_next = y + ey_d[n];
-
-		bool solid = cylinder_d[gpu_scalar_index(x_next, y_next)];
-
-		unsigned int noslip_n = noslip[n];
-		if (solid){
-			f2[gpu_fieldn_index(x, y, noslip_n)] = f2[gpu_fieldn_index(x, y, n)];
-		}
+	if(y == Ny_d-1){
+		f[gpu_fieldn_index(x, y, 4)] = f[gpu_fieldn_index(x, y, 2)];
+		f[gpu_fieldn_index(x, y, 7)] = f[gpu_fieldn_index(x, y, 5)];
+		f[gpu_fieldn_index(x, y, 8)] = f[gpu_fieldn_index(x, y, 6)];
 	}
 }
 
@@ -163,7 +124,7 @@ __global__ void gpu_stream_collide_save(double *f0, double *f1, double *f2, doub
 
 	double ft0 = f0[gpu_field0_index(x, y)];
 
-	// Streaming step
+	// Streaming step with Periodic Boundary Conditions
 	double ft1 = f1[gpu_fieldn_index(xb, y, 1)];
 	double ft2 = f1[gpu_fieldn_index(x, yb, 2)];
 	double ft3 = f1[gpu_fieldn_index(xf, y, 3)];
@@ -231,47 +192,12 @@ __global__ void gpu_stream_collide_save(double *f0, double *f1, double *f2, doub
 		f2[gpu_fieldn_index(x, y, n)] = (1.0 - omega)*f1neq[gpu_fieldn_index(x, y, n)] + feq;
 	}
 
-	bool node_fluid = fluid_d[gpu_scalar_index(x, y)];
+	bool node_solid = solid_d[gpu_scalar_index(x, y)];
 
-	if (node_fluid){
+	if(node_solid){
 		gpu_bounce_back(x, y, f2);
 	}
 
-	unsigned int idx_s = gpu_scalar_index(x, y);
-
-	if(x == 0){
-		unsigned int idx_1 = gpu_fieldn_index(x, y, 1);
-		unsigned int idx_5 = gpu_fieldn_index(x, y, 5);
-		unsigned int idx_8 = gpu_fieldn_index(x, y, 8);
-
-		gpu_zou_he_inlet(x, y, f0, f2, &f2[idx_1], &f2[idx_5], &f2[idx_8], &r[idx_s], &u[idx_s], &v[idx_s]);
-	}
-
-	if(x == Nx_d-1){
-
-		int x_before = x - 1;
-		gpu_outflow(x, y, x_before, y, f0, f2);
-	}
-
-	if(y == 0){
-
-		//int y_before = y + 1;
-		//gpu_outflow(x, y, x, y_before, f0, f2);
-
-		f2[gpu_fieldn_index(x, y, 2)] = f2[gpu_fieldn_index(x, y, 4)];
-		f2[gpu_fieldn_index(x, y, 5)] = f2[gpu_fieldn_index(x, y, 7)];
-		f2[gpu_fieldn_index(x, y, 6)] = f2[gpu_fieldn_index(x, y, 8)];
-	}
-
-	if(y == Ny_d-1){
-
-		//int y_before = y - 1;
-		//gpu_outflow(x, y, x, y_before, f0, f2);
-
-		f2[gpu_fieldn_index(x, y, 4)] = f2[gpu_fieldn_index(x, y, 2)];
-		f2[gpu_fieldn_index(x, y, 7)] = f2[gpu_fieldn_index(x, y, 5)];
-		f2[gpu_fieldn_index(x, y, 8)] = f2[gpu_fieldn_index(x, y, 6)];
-	}
 }
 
 __host__ void compute_flow_properties(unsigned int t, double *r, double *u, double *v, double *prop, double *prop_gpu, double *prop_host){
@@ -428,11 +354,7 @@ __host__ bool* generate_mesh(bool *mesh, std::string mode){
 	
 
 	if(mode == "solid"){
-		checkCudaErrors(cudaMemcpyToSymbol(cylinder_d, &temp_mesh, sizeof(temp_mesh)));
-		mode_num = 1;
-	}
-	else if(mode == "fluid"){
-		checkCudaErrors(cudaMemcpyToSymbol(fluid_d, &temp_mesh, sizeof(temp_mesh)));
+		checkCudaErrors(cudaMemcpyToSymbol(solid_d, &temp_mesh, sizeof(temp_mesh)));
 		mode_num = 1;
 	}
 
@@ -448,15 +370,7 @@ __global__ void gpu_print_mesh(int mode){
 	if(mode == 1){
 		for(int y = 0; y < Ny_d; ++y){
 			for(int x = 0; x < Nx_d; ++x){
-				printf("%d ", cylinder_d[Nx_d*y + x]);
-			}
-		printf("\n");
-		}
-	}
-	else if(mode == 2){
-		for(int y = 0; y < Ny_d; ++y){
-			for(int x = 0; x < Nx_d; ++x){
-				printf("%d ", fluid_d[Nx_d*y + x]);
+				printf("%d ", solid_d[Nx_d*y + x]);
 			}
 		printf("\n");
 		}
