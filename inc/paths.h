@@ -5,6 +5,5 @@
 
 const std::string folder = "./bin/Results/";
 const std::string solid_mesh = "./bin/Mesh/mesh.bin";
-const std::string fluid_mesh = "./bin/Mesh/fluid_wall.bin";
 
 #endif
