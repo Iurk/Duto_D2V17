@@ -5,6 +5,8 @@ bin/Velocity/
 obj/
 __pycache__/
 
+*.xlsx 
+
 # Exe
 lbm
 
