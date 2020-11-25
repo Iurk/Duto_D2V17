@@ -19,7 +19,7 @@ using namespace myGlobals;
 
 // Input data
 __constant__ unsigned int q, Nx_d, Ny_d;
-__constant__ double rho0_d, u_max_d, nu_d, tau_d;
+__constant__ double rho0_d, u_max_d, nu_d, tau_d, mi_ar_d;
 
 //Lattice Data
 __constant__ double cs_d, w0_d, ws_d, wd_d;
@@ -46,6 +46,16 @@ __global__ void gpu_stream_collide_save(double*, double*, double*, double*, doub
 __global__ void gpu_compute_flow_properties(unsigned int, double*, double*, double*, double*);
 __global__ void gpu_print_mesh(int);
 __global__ void gpu_initialization(double*, double);
+
+// Poiseulle Flow
+__device__ void poiseulle_eval(unsigned int t, unsigned int x, unsigned int y, double *u){
+
+	double delta_p_L = 8*u_max_d*mi_ar_d/(Ny_d*Ny_d);
+
+	double ux = (1/(2*mi_ar_d))*(delta_p_L)*((Ny_d - 1)*y - y*y);
+
+	*u = ux;
+}
 
 // Boundary Conditions
 __device__ void gpu_bounce_back(unsigned int x, unsigned int y, double *f){
@@ -200,25 +210,34 @@ __global__ void gpu_stream_collide_save(double *f0, double *f1, double *f2, doub
 
 }
 
-__host__ void compute_flow_properties(unsigned int t, double *r, double *u, double *v, double *prop, double *prop_gpu, double *prop_host){
+__host__ std::vector<double> compute_flow_properties(unsigned int t, double *r, double *u, double *v, std::vector<double> prop, double *prop_gpu, double *prop_host){
 
 	dim3 grid(Nx/nThreads, Ny, 1);
 	dim3 block(nThreads, 1, 1);
 
-	gpu_compute_flow_properties<<< grid, block, block.x*sizeof(double) >>>(t, r, u, v, prop_gpu);
+	gpu_compute_flow_properties<<< grid, block, 3*block.x*sizeof(double) >>>(t, r, u, v, prop_gpu);
 	getLastCudaError("gpu_compute_flow_properties kernel error");
 
-	size_t prop_size_bytes = grid.x*grid.y*sizeof(double);
+	size_t prop_size_bytes = 3*grid.x*grid.y*sizeof(double);
 	checkCudaErrors(cudaMemcpy(prop_host, prop_gpu, prop_size_bytes, cudaMemcpyDeviceToHost));
 
 	double E = 0.0;
 
+	double sumuxe2 = 0.0;
+	double sumuxa2 = 0.0;
+
 	for(unsigned int i = 0; i < grid.x*grid.y; ++i){
 
-		E += prop_host[i];
+		E += prop_host[3*i];
+
+		sumuxe2  += prop_host[3*i+1];
+		sumuxa2  += prop_host[3*i+2];
 	}
 
-	prop[0] = E;
+	prop.push_back(E);
+	prop.push_back(sqrt(sumuxe2/sumuxa2));
+
+	return prop;
 }
 
 __global__ void gpu_compute_flow_properties(unsigned int t, double *r, double *u, double *v, double *prop_gpu){
@@ -229,6 +248,8 @@ __global__ void gpu_compute_flow_properties(unsigned int t, double *r, double *u
 	extern __shared__ double data[];
 
 	double *E = data;
+    double *uxe2  = data + 1*blockDim.x;
+    double *uxa2  = data + 2*blockDim.x;
 
 	double rho = r[gpu_scalar_index(x, y)];
 	double ux = u[gpu_scalar_index(x, y)];
@@ -236,28 +257,49 @@ __global__ void gpu_compute_flow_properties(unsigned int t, double *r, double *u
 
 	E[threadIdx.x] = rho*(ux*ux + uy*uy);
 
+	// compute analytical results
+    double uxa;
+    poiseulle_eval(t, x, y, &uxa);
+
+     // compute terms for L2 error
+    uxe2[threadIdx.x]  = (ux - uxa)*(ux - uxa);
+    uxa2[threadIdx.x]  = uxa*uxa;
+
 	__syncthreads();
 
 	if (threadIdx.x == 0){
 		
-		size_t idx = 1*(gridDim.x*blockIdx.y + blockIdx.x);
+		size_t idx = 3*(gridDim.x*blockIdx.y + blockIdx.x);
 
-		for(int n = 0; n < 1; ++n){
+		for(int n = 0; n < 3; ++n){
 			prop_gpu[idx+n] = 0.0;
 		}
 
 		for(int i = 0; i < blockDim.x; ++i){
-			prop_gpu[idx] += E[i];
+			prop_gpu[idx  ] += E[i];
+            prop_gpu[idx+1] += uxe2[i];
+            prop_gpu[idx+2] += uxa2[i];
 		}
 	}
 }
 
-__host__ void report_flow_properties(unsigned int t, double *rho, double *ux, double *uy,
-									 double *prop_gpu, double *prop_host){
+__host__ std::vector<double> report_flow_properties(unsigned int t, double *rho, double *ux, double *uy,
+									 double *prop_gpu, double *prop_host, bool msg, bool computeFlowProperties){
 
-	double prop[1];
-	compute_flow_properties(t, rho, ux, uy, prop, prop_gpu, prop_host);
-	printf("%u, %g\n", t, prop[0]);
+	std::vector<double> prop;
+	prop = compute_flow_properties(t, rho, ux, uy, prop, prop_gpu, prop_host);
+
+	if(msg){
+		if(computeFlowProperties){
+			printf("%u, %g, %g\n", t, prop[0], prop[1]);
+		}
+
+		if(!quiet){
+			printf("Completed timestep %d\n", t);
+		}
+	}
+	
+	return prop;
 }
 
 __host__ void save_scalar(const std::string name, double *scalar_gpu, double *scalar_host, unsigned int n){
@@ -308,13 +350,14 @@ __host__ void save_scalar(const std::string name, double *scalar_gpu, double *sc
 	fclose(fout);
 }
 
-void wrapper_input(unsigned int *nx, unsigned int *ny, double *rho, double *u, double *nu, const double *tau){
+void wrapper_input(unsigned int *nx, unsigned int *ny, double *rho, double *u, double *nu, const double *tau, const double *mi_ar){
 	checkCudaErrors(cudaMemcpyToSymbol(Nx_d, nx, sizeof(unsigned int)));
 	checkCudaErrors(cudaMemcpyToSymbol(Ny_d, ny, sizeof(unsigned int)));
 	checkCudaErrors(cudaMemcpyToSymbol(rho0_d, rho, sizeof(double)));
 	checkCudaErrors(cudaMemcpyToSymbol(u_max_d, u, sizeof(double)));
 	checkCudaErrors(cudaMemcpyToSymbol(nu_d, nu, sizeof(double)));
 	checkCudaErrors(cudaMemcpyToSymbol(tau_d, tau, sizeof(double)));
+	checkCudaErrors(cudaMemcpyToSymbol(mi_ar_d, mi_ar, sizeof(double)));
 }
 
 void wrapper_lattice(unsigned int *ndir, double *c, double *w_0, double *w_s, double *w_d){
