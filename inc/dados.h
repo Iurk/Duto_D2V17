@@ -20,6 +20,9 @@ namespace myGlobals{
 	extern double nu;
 	extern const double tau;
 
+	//Air
+	extern const double mi_ar;
+
 	//Lattice Info
 	extern unsigned int ndir;
 	extern int *ex;

@@ -14,6 +14,7 @@ const YAML::Node& domain = config["domain"];
 const YAML::Node& simulation = config["simulation"];
 const YAML::Node& gpu = config["gpu"];
 const YAML::Node& input = config["input"];
+const YAML::Node& air = config["air"];
 
 std::string Lattice = simulation["lattice"].as<std::string>();
 const YAML::Node& lattice = config_lattice[Lattice];
@@ -21,13 +22,13 @@ const YAML::Node& lattice = config_lattice[Lattice];
 namespace myGlobals{
 
 	//Domain
-	unsigned int Nx = domain["Nx"].as<int>();
-	unsigned int Ny = domain["Ny"].as<int>();
+	unsigned int Nx = domain["Nx"].as<unsigned int>();
+	unsigned int Ny = domain["Ny"].as<unsigned int>();
 
 	//Simulation
-	unsigned int NSTEPS = simulation["NSTEPS"].as<int>();
-	unsigned int NSAVE = simulation["NSAVE"].as<int>();
-	unsigned int NMSG = simulation["NMSG"].as<int>();
+	unsigned int NSTEPS = simulation["NSTEPS"].as<unsigned int>();
+	unsigned int NSAVE = simulation["NSAVE"].as<unsigned int>();
+	unsigned int NMSG = simulation["NMSG"].as<unsigned int>();
 	bool computeFlowProperties = simulation["computeFlowProperties"].as<bool>();
 	bool quiet = simulation["quiet"].as<bool>();
 	bool meshprint = simulation["meshprint"].as<bool>();
@@ -39,6 +40,9 @@ namespace myGlobals{
 	double u_max = input["u_max"].as<double>();
 	double rho0 = input["rho0"].as<double>();
 	double Re = input["Re"].as<double>();
+
+	//Air
+	const double mi_ar = air["mi"].as<double>();
 
 	//Lattice Info
 	unsigned int ndir = lattice["q"].as<unsigned int>();
