@@ -59,7 +59,7 @@ int main(int argc, char const *argv[]){
 	checkCudaErrors(cudaMalloc((void**)&ux_gpu, mem_size_scalar));
 	checkCudaErrors(cudaMalloc((void**)&uy_gpu, mem_size_scalar));
 
-	const size_t mem_size_props = Nx/nThreads*Ny*sizeof(double);
+	const size_t mem_size_props = 3*Nx/nThreads*Ny*sizeof(double);
 	checkCudaErrors(cudaMalloc((void**)&prop_gpu, mem_size_props));
 
 	double *scalar_host;
@@ -77,7 +77,7 @@ int main(int argc, char const *argv[]){
 	checkCudaErrors(cudaEventCreate(&stop));
 
 	// Allocation of Input data in Device constant memory
-	wrapper_input(&Nx, &Ny, &rho0, &u_max, &nu, &tau);
+	wrapper_input(&Nx, &Ny, &rho0, &u_max, &nu, &tau, &mi_ar);
 
 	// Allocation of Lattice data in Device constant and global memory
 	wrapper_lattice(&ndir, &cs, &w0, &ws, &wd);
@@ -112,6 +112,8 @@ int main(int argc, char const *argv[]){
 	double begin = seconds();
 	checkCudaErrors(cudaEventRecord(start, 0));
 
+	std::vector<double> error_prop;
+
 	// Main Loop
 	for(unsigned int n = 0; n < NSTEPS; ++n){
 		bool save = (n+1)%NSAVE == 0;
@@ -143,14 +145,11 @@ int main(int argc, char const *argv[]){
 		f1_gpu = f2_gpu;
 		f2_gpu = temp;
 
-		if(msg){
-			if(computeFlowProperties){
-				report_flow_properties(n+1, rho_gpu, ux_gpu, uy_gpu, prop_gpu, scalar_host);
-			}
+		error_prop = report_flow_properties(n+1, rho_gpu, ux_gpu, uy_gpu, prop_gpu, scalar_host, msg, computeFlowProperties);
 
-			if(!quiet){
-				printf("Completed timestep %d\n", n+1);
-			}
+		if(error_prop[1] < 0.03){
+			printf("%u, %g, %g\n", n+1, error_prop[0], error_prop[1]);
+			break;
 		}
 	}
 	
