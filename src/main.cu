@@ -11,15 +11,16 @@ int main(int argc, char const *argv[]){
 
 	// Writing Simulation Parameters
 	printf("Simulating the Poiseulle Flow\n");
-	printf("  Domain size: %ux%u\n", Nx, Ny);
-	printf("           nu: %g\n", nu);
-	printf("          tau: %g\n", tau);
-	printf("        u_max: %g\n", u_max);
-	printf("         rho0: %g\n", rho0);
-	printf("           Re: %g\n", Re);
-	printf("  Times Stpes: %u\n", NSTEPS);
-	printf("   Save every: %u\n", NSAVE);
-	printf("Message every: %u\n", NMSG);
+	printf("       Domain size: %ux%u\n", Nx, Ny);
+	printf("                nu: %g\n", nu);
+	printf("               tau: %g\n", tau);
+	printf("             u_max: %g\n", u_max);
+	printf("              rho0: %g\n", rho0);
+	printf("                Re: %g\n", Re);
+	printf("       Times Stpes: %u\n", NSTEPS);
+	printf("        Save every: %u\n", NSAVE);
+	printf("     Message every: %u\n", NMSG);
+	printf("Velocity Tolerance: %g\n", erro_max);
 
 	double bytesPerMiB = 1024.0*1024.0;
 	double bytesPerGiB = 1024.0*1024.0*1024.0;
@@ -147,7 +148,7 @@ int main(int argc, char const *argv[]){
 
 		error_prop = report_flow_properties(n+1, rho_gpu, ux_gpu, uy_gpu, prop_gpu, scalar_host, msg, computeFlowProperties);
 
-		if(error_prop[1] < 0.03){
+		if(error_prop[1] < erro_max){
 			printf("%u, %g, %g\n", n+1, error_prop[0], error_prop[1]);
 			break;
 		}
