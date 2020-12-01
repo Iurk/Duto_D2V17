@@ -5,13 +5,14 @@ Created on Thu May 28 16:27:54 2020
 
 @author: iurk
 """
+import re
 import yaml
 import numpy as np
 from os import walk
 import utilidades as util
 import multiprocessing as mp
 import funcoes_graficos as fg
-from time import time, sleep
+from time import time
 
 def plotting(args):
     idx_file, rho, ux, uy = args
@@ -36,8 +37,6 @@ if __name__ == '__main__':
     Steps = data['simulation']['NSTEPS']
     Saves = data['simulation']['NSAVE']
     digitos = len(str(Steps))
-    
-    idx_files = ["%0{}d".format(digitos) % i for i in range(0, Steps+Saves, Saves)]
     
     results = "./bin/Results/"
     pasta_img = util.criar_pasta('Images', folder=velocity, main_root=main)
@@ -68,17 +67,18 @@ if __name__ == '__main__':
     uys = np.empty_like(rhos)
     
     i = 0
-    print("Reading and plotting data...")
-    while(i < len(idx_files)):
-        for j in range(CPU):
+    pattern = r'\d{%d}' % len(str(Steps))
     
-            idx.append(idx_files[i])
+    print("Reading and plotting data...")
+    while(i < len(rho_files)):
+        for j in range(CPU):
+            idx.append(re.search(pattern, rho_files[i]).group(0))
             rhos[j] = np.fromfile(rho_files[i], dtype='float64').reshape(Ny, Nx)
             uxs[j] = np.fromfile(ux_files[i], dtype='float64').reshape(Ny, Nx)
             uys[j] = np.fromfile(uy_files[i], dtype='float64').reshape(Ny, Nx)
             
             i += 1
-            if(i == len(idx_files)):
+            if(i == len(rho_files)):
                 break
         
         inputs = zip(idx, rhos, uxs, uys)
