@@ -1,6 +1,6 @@
 domain:
   Nx: 1024
-  Ny: 256
+  Ny: 512
 
 simulation:
   lattice: D2Q9
@@ -10,6 +10,7 @@ simulation:
   computeFlowProperties: true
   quiet: true
   meshprint: false
+  erro_max: 3e-2
 
 gpu:
   nThreads: 32

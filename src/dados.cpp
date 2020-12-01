@@ -32,6 +32,7 @@ namespace myGlobals{
 	bool computeFlowProperties = simulation["computeFlowProperties"].as<bool>();
 	bool quiet = simulation["quiet"].as<bool>();
 	bool meshprint = simulation["meshprint"].as<bool>();
+	double erro_max = simulation["erro_max"].as<double>();
 
 	//GPU
 	unsigned int nThreads = gpu["nThreads"].as<unsigned int>();
