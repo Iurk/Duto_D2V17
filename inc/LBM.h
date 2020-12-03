@@ -10,7 +10,7 @@ std::vector<double> compute_flow_properties(unsigned int, double*, double*, doub
 std::vector<double> report_flow_properties(unsigned int, double*, double*, double*, double*, double*, bool, bool);
 void save_scalar(const std::string , double*, double*, unsigned int);
 void wrapper_input(unsigned int*, unsigned int*, double*, double*, double*, const double*, const double*);
-void wrapper_lattice(unsigned int*, double*, double*, double*, double*);
+void wrapper_lattice(unsigned int*, double*, double*, double*, double*, double*, double*);
 int* generate_e(int*, std::string);
 bool* generate_mesh(bool*, std::string);
 bool* create_pinned_mesh(bool *);

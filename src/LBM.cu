@@ -22,7 +22,7 @@ __constant__ unsigned int q, Nx_d, Ny_d;
 __constant__ double rho0_d, u_max_d, nu_d, tau_d, mi_ar_d;
 
 //Lattice Data
-__constant__ double cs_d, w0_d, ws_d, wd_d;
+__constant__ double as_d, w0_d, wp_d, ws_d, wt_d, wq_d;
 __device__ int *ex_d;
 __device__ int *ey_d;
 
@@ -91,15 +91,15 @@ __global__ void gpu_init_equilibrium(double *f0, double *f1, double *r, double *
 	double ux = u[gpu_scalar_index(x, y)];
 	double uy = v[gpu_scalar_index(x, y)];
 
-	double A = 1.0/(cs_d*cs_d);
-	double B = 1.0/(2.0*cs_d*cs_d);
+	double A = 1.0/(as_d*as_d);
+	double B = 1.0/(2.0*as_d*as_d);
 
 	double w0r = w0_d*rho;
+	double wpr = wp_d*rho;
 	double wsr = ws_d*rho;
-	double wdr = wd_d*rho;
-	double omusq = 1.0 - B*(ux*ux + uy*uy);
+	double omusq = 1.0 - B*(ux*ux + uy*uy);                                                                                                                                              
 
-	double Wrho[] = {w0r, wsr, wsr, wsr, wsr, wdr, wdr, wdr, wdr};
+	double Wrho[] = {w0r, wpr, wpr, wpr, wpr, wsr, wsr, wsr, wsr};
 
 	f0[gpu_field0_index(x, y)] = Wrho[0]*(omusq);
 	for(int n = 1; n < q; ++n){
@@ -165,15 +165,15 @@ __global__ void gpu_stream_collide_save(double *f0, double *f1, double *f2, doub
 		v[gpu_scalar_index(x, y)] = uy;
 	}
 
-	double A = 1.0/(cs_d*cs_d);
-	double B = 1.0/(2.0*cs_d*cs_d);
+	double A = 1.0/(as_d*as_d);
+	double B = 1.0/(2.0*as_d*as_d);
 
 	double w0r = w0_d*rho;
+	double wpr = wp_d*rho;
 	double wsr = ws_d*rho;
-	double wdr = wd_d*rho;
 
-	double W[] = {w0_d, ws_d, ws_d, ws_d, ws_d, wd_d, wd_d, wd_d, wd_d};
-	double Wrho[] = {w0r, wsr, wsr, wsr, wsr, wdr, wdr, wdr, wdr};
+	double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d};
+	double Wrho[] = {w0r, wpr, wpr, wpr, wpr, wsr, wsr, wsr, wsr};
 
 	double omusq = 1.0 - B*(ux*ux + uy*uy);
 
@@ -360,12 +360,14 @@ void wrapper_input(unsigned int *nx, unsigned int *ny, double *rho, double *u, d
 	checkCudaErrors(cudaMemcpyToSymbol(mi_ar_d, mi_ar, sizeof(double)));
 }
 
-void wrapper_lattice(unsigned int *ndir, double *c, double *w_0, double *w_s, double *w_d){
+void wrapper_lattice(unsigned int *ndir, double *a, double *w_0, double *w_p, double *w_s, double *w_t, double *w_q){
 	checkCudaErrors(cudaMemcpyToSymbol(q, ndir, sizeof(unsigned int)));
-	checkCudaErrors(cudaMemcpyToSymbol(cs_d, c, sizeof(double)));
+	checkCudaErrors(cudaMemcpyToSymbol(as_d, a, sizeof(double)));
 	checkCudaErrors(cudaMemcpyToSymbol(w0_d, w_0, sizeof(double)));
+	checkCudaErrors(cudaMemcpyToSymbol(wp_d, w_p, sizeof(double)));
 	checkCudaErrors(cudaMemcpyToSymbol(ws_d, w_s, sizeof(double)));
-	checkCudaErrors(cudaMemcpyToSymbol(wd_d, w_d, sizeof(double)));
+	checkCudaErrors(cudaMemcpyToSymbol(wt_d, w_t, sizeof(double)));
+	checkCudaErrors(cudaMemcpyToSymbol(wq_d, w_q, sizeof(double)));
 }
 
 __host__ int* generate_e(int *e, std::string mode){
