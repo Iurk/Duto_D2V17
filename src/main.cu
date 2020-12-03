@@ -81,7 +81,7 @@ int main(int argc, char const *argv[]){
 	wrapper_input(&Nx, &Ny, &rho0, &u_max, &nu, &tau, &mi_ar);
 
 	// Allocation of Lattice data in Device constant and global memory
-	wrapper_lattice(&ndir, &cs, &w0, &ws, &wd);
+	wrapper_lattice(&ndir, &as, &w0, &wp, &ws, &wt, &wq);
 
 	int *ex_gpu, *ey_gpu;
 
@@ -153,7 +153,7 @@ int main(int argc, char const *argv[]){
 			break;
 		}
 	}
-	
+
 	// Measuring time
 	checkCudaErrors(cudaEventRecord(stop, 0));
 	checkCudaErrors(cudaEventSynchronize(stop));
