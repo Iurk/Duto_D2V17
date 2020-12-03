@@ -28,7 +28,7 @@ namespace myGlobals{
 	extern unsigned int ndir;
 	extern int *ex;
 	extern int *ey;
-	extern double cs, w0, ws, wd;
+	extern double as, w0, wp, ws, wt, wq;
 
 	//Memory Sizes
 	extern const size_t mem_mesh;

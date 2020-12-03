@@ -49,17 +49,21 @@ namespace myGlobals{
 	unsigned int ndir = lattice["q"].as<unsigned int>();
 	std::vector<int> ex_vec = lattice["ex"].as<std::vector<int>>();
 	std::vector<int> ey_vec = lattice["ey"].as<std::vector<int>>();
-	std::string cs_str = lattice["cs"].as<std::string>();
+	std::string as_str = lattice["as"].as<std::string>();
 	std::string w0_str = lattice["w0"].as<std::string>();
+	std::string wp_str = lattice["wp"].as<std::string>();
 	std::string ws_str = lattice["ws"].as<std::string>();
-	std::string wd_str = lattice["wd"].as<std::string>();
+	std::string wt_str = lattice["wt"].as<std::string>();
+	std::string wq_str = lattice["wq"].as<std::string>();
 
 	int *ex = ex_vec.data();
 	int *ey = ey_vec.data();
-	double cs = equation_parser(cs_str);
+	double as = equation_parser(as_str);
 	double w0 = equation_parser(w0_str);
+	double wp = equation_parser(wp_str);
 	double ws = equation_parser(ws_str);
-	double wd = equation_parser(wd_str);
+	double wt = equation_parser(wt_str);
+	double wq = equation_parser(wq_str);
 
 	//Memory Sizes
 	const size_t mem_mesh = sizeof(bool)*Nx*Ny;
@@ -69,7 +73,7 @@ namespace myGlobals{
 
 	// Nu and Tau
 	double nu = (u_max*Nx)/Re;
-	const double tau = nu/(cs*cs) + 0.5;
+	const double tau = nu*(as*as) + 0.5;
 
 	bool *solid = read_bin(solid_mesh);
 }
