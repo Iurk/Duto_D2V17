@@ -1,23 +1,23 @@
 domain:
   Nx: 1024
-  Ny: 512
+  Ny: 256
 
 simulation:
-  lattice: D2Q9
-  NSTEPS: 10000
+  lattice: D2V17
+  NSTEPS: 50000
   NSAVE: 200
   NMSG: 1000
   computeFlowProperties: true
   quiet: true
   meshprint: false
-  erro_max: 3e-2
+  erro_max: 1e-3
 
 gpu:
   nThreads: 32
 
 input:
   Re: 50
-  u_max: 0.04
+  u_max: 0.1
   rho0: 1.0
 
 air:
