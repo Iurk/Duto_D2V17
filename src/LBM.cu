@@ -47,6 +47,41 @@ __global__ void gpu_compute_flow_properties(unsigned int, double*, double*, doub
 __global__ void gpu_print_mesh(int);
 __global__ void gpu_initialization(double*, double);
 
+// Equilibrium
+__device__ void gpu_init_equilibrium(){
+	
+}
+
+// Hermite
+__device__ void hermite_polynomial(int ex, int ey, double cs, double *H){
+
+	H[0] = 1;								// 0
+	H[1] = ex;								// 1 - x
+	H[2] = ey;								// 1 - y
+	H[3] = pow(ex, 2) - pow(cs, 2);			// 2 - xx
+	H[4] = ex*ey;							// 2 - xy
+	H[5] = pow(ey, 2) - pow(cs, 2);			// 2 - yy
+	H[6] = pow(ex, 3) - 3*ex*pow(cs, 2);	// 3 - xxx
+	H[7] = pow(ex, 2)*ey - ey*pow(cs, 2);	// 3 - yxx
+	H[8] = ex*pow(ey, 2) - ex*pow(cs, 2);	// 3 - xyy
+	H[9] = pow(ey, 3) - 3*ey*pow(cs, 2);	// 3 - yyy
+
+}
+
+__device__ void hermite_moments(double rho, double ux, double uy, double tauxx, double tauxy, double tauyy, double *a){
+
+	a[0] = rho;											// 0
+	a[1] = rho*ux;										// 1 - x
+	a[2] = rho*uy;										// 1 - y
+	a[3] = rho*pow(ux, 2) + tauxx;						// 2 - xx
+	a[4] = rho*ux*uy + tauxy;							// 2 - xy
+	a[5] = rho*pow(uy, 2) + tauyy;						// 2 - yy
+	a[6] = rho*pow(ux, 3) + 3*ux*tauxx;					// 3 - xxx
+	a[7] = rho*pow(ux, 2)*uy + 2*ux*tauxy + uy*tauxx;	// 3 - yxx
+	a[8] = rho*ux*pow(uy, 2) + 2*uy*tauxy + ux*tauyy;	// 3 - xyy
+	a[9] = rho*pow(uy, 3) + 3*uy*tauyy;				// 3 - yyy
+}
+
 // Poiseulle Flow
 __device__ void poiseulle_eval(unsigned int t, unsigned int x, unsigned int y, double *u){
 
@@ -91,20 +126,36 @@ __global__ void gpu_init_equilibrium(double *f0, double *f1, double *r, double *
 	double ux = u[gpu_scalar_index(x, y)];
 	double uy = v[gpu_scalar_index(x, y)];
 
-	double A = 1.0/(as_d*as_d);
-	double B = 1.0/(2.0*as_d*as_d);
+	double cs = 1.0/as_d;
+
+	double A = 1.0/(pow(cs, 2));
+	double B = 1.0/(2.0*pow(cs, 4));
+	double C = 1.0/(6.0*pow(cs, 6));
 
 	double w0r = w0_d*rho;
 	double wpr = wp_d*rho;
 	double wsr = ws_d*rho;
-	double omusq = 1.0 - B*(ux*ux + uy*uy);                                                                                                                                              
+	double wtr = wt_d*rho;
+	double wqr = wq_d*rho;
 
-	double Wrho[] = {w0r, wpr, wpr, wpr, wpr, wsr, wsr, wsr, wsr};
+	double Wrho[] = {w0r, wpr, wpr, wpr, wpr, wsr, wsr, wsr, wsr, wtr, wtr, wtr, wtr, wqr, wqr, wqr, wqr};
 
-	f0[gpu_field0_index(x, y)] = Wrho[0]*(omusq);
-	for(int n = 1; n < q; ++n){
-		double eidotu = ux*ex_d[n] + uy*ey_d[n];
-		f1[gpu_fieldn_index(x, y, n)] = Wrho[n]*(omusq + A*eidotu*(1.0 + B*eidotu));
+	for(int n = 0; n < q; ++n){
+		double order_1 = A*(ux*ex_d[n] + uy*ey_d[n]);
+		double order_2 = B*(pow(ux, 2)*(pow(ex_d[n], 2) - pow(cs, 2)) + 2*ux*uy*ex_d[n]*ey_d[n] + pow(uy, 2)*(pow(ey_d[n], 2) - pow(cs, 2)));
+		
+		double xxx = pow(ux, 3)*(pow(ex_d[n], 3) - 3*ex_d[n]*pow(cs, 2));
+		double yxx = pow(ux, 2)*uy*(pow(ex_d[n], 2)*ey_d[n] - ey_d[n]*pow(cs, 2));
+		double xyy = ux*pow(uy, 2)*(ex_d[n]*pow(ey_d[n], 2) - ex_d[n]*pow(cs, 2));
+		double yyy = pow(uy, 3)*(pow(ey_d[n], 3) - 3*ey_d[n]*pow(cs, 2));
+		double order_3 = C*(xxx + yxx + xyy + yyy);
+
+		if (n == 0){
+			f0[gpu_field0_index(x, y)] = Wrho[n]*(1 + order_1 + order_2 + order_3);
+		}
+		else{
+			f1[gpu_fieldn_index(x, y, n)] = Wrho[n]*(1 + order_1 + order_2 + order_3);
+		}
 	}
 }
 
@@ -120,21 +171,24 @@ __host__ void stream_collide_save(double *f0, double *f1, double *f2, double *f0
 	getLastCudaError("gpu_stream_collide_save kernel error");
 }
 
-__global__ void gpu_stream_collide_save(double *f0, double *f1, double *f2, double *f0neq, double *f1neq, double *r, double *u, double *v, bool save){
+__global__ void gpu_stream_collide_save(double *f0, double *f1, double *f2, double *f0rec, double *f1rec, double *r, double *u, double *v, bool save){
 
 	const double omega = 1.0/tau_d;
 
 	unsigned int y = blockIdx.y;
 	unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
 
-	unsigned int xf = (x + 1)%Nx_d;		// Forward
-	unsigned int yf = (y + 1)%Ny_d;		// Forward
-	unsigned int xb = (Nx_d + x - 1)%Nx_d;	// Backward
-	unsigned int yb = (Ny_d + y - 1)%Ny_d; // Backward
+	unsigned int xf, yf, xb, yb;
+
+	// Streaming Step
+	// 1 - 8 directions
+	xf = (x + 1)%Nx_d;		// Forward
+	yf = (y + 1)%Ny_d;		// Forward
+	xb = (Nx_d + x - 1)%Nx_d;	// Backward
+	yb = (Ny_d + y - 1)%Ny_d; // Backward
 
 	double ft0 = f0[gpu_field0_index(x, y)];
 
-	// Streaming step with Periodic Boundary Conditions
 	double ft1 = f1[gpu_fieldn_index(xb, y, 1)];
 	double ft2 = f1[gpu_fieldn_index(x, yb, 2)];
 	double ft3 = f1[gpu_fieldn_index(xf, y, 3)];
@@ -144,20 +198,43 @@ __global__ void gpu_stream_collide_save(double *f0, double *f1, double *f2, doub
 	double ft7 = f1[gpu_fieldn_index(xf, yf, 7)];
 	double ft8 = f1[gpu_fieldn_index(xb, yf, 8)];
 
-	double f[] = {ft0, ft1, ft2, ft3, ft4, ft5, ft6, ft7, ft8};
+	// 9 - 12 directions
+	xf = (x + 2)%Nx_d;		// Forward
+	yf = (y + 2)%Ny_d;		// Forward
+	xb = (Nx_d + x - 2)%Nx_d;	// Backward
+	yb = (Ny_d + y - 2)%Ny_d; // Backward
 
-	double rho = 0, ux_i = 0, uy_i = 0;
+	double ft9 = f1[gpu_fieldn_index(xb, yb, 9)];
+	double ft10 = f1[gpu_fieldn_index(xf, yb, 10)];
+	double ft11 = f1[gpu_fieldn_index(xf, yf, 11)];
+	double ft12 = f1[gpu_fieldn_index(xb, yf, 12)];
+
+	// 13 - 16 directions
+	xf = (x + 3)%Nx_d;		// Forward
+	yf = (y + 3)%Ny_d;		// Forward
+	xb = (Nx_d + x - 3)%Nx_d;	// Backward
+	yb = (Ny_d + y - 3)%Ny_d; // Backward
+
+	double ft13 = f1[gpu_fieldn_index(xb, y, 13)];
+	double ft14 = f1[gpu_fieldn_index(x, yb, 14)];
+	double ft15 = f1[gpu_fieldn_index(xf, y, 15)];
+	double ft16 = f1[gpu_fieldn_index(x, yf, 16)];
+
+	double f[] = {ft0, ft1, ft2, ft3, ft4, ft5, ft6, ft7, ft8, ft9, ft10, ft11, ft12, ft13, ft14, ft15, ft16};
+
+	double rho = 0, ux_i = 0, uy_i = 0, tau_xx = 0, tau_xy = 0, tau_yy = 0;
 
 	for(int n = 0; n < q; ++n){
 		rho += f[n];
 		ux_i += f[n]*ex_d[n];
 		uy_i += f[n]*ey_d[n];
+		tau_xx += f[n]*ex_d[n]*ex_d[n];
+		tau_xy += f[n]*ex_d[n]*ey_d[n];
+		tau_yy += f[n]*ey_d[n]*ey_d[n];
 	}
 
-	double rhoinv = 1.0/rho;
-
-	double ux = rhoinv*ux_i;
-	double uy = rhoinv*uy_i;
+	double ux = ux_i/rho;
+	double uy = uy_i/rho;
 
 	if(save){
 		r[gpu_scalar_index(x, y)] = rho;
@@ -165,45 +242,44 @@ __global__ void gpu_stream_collide_save(double *f0, double *f1, double *f2, doub
 		v[gpu_scalar_index(x, y)] = uy;
 	}
 
-	double A = 1.0/(as_d*as_d);
-	double B = 1.0/(2.0*as_d*as_d);
+	double cs = 1.0/as_d;
+
+	double A = 1.0/(pow(cs, 2));
+	double B = 1.0/(2.0*pow(cs, 4));
+	double C = 1.0/(6.0*pow(cs, 6));
 
 	double w0r = w0_d*rho;
 	double wpr = wp_d*rho;
 	double wsr = ws_d*rho;
+	double wtr = wt_d*rho;
+	double wqr = wq_d*rho;
 
-	double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d};
-	double Wrho[] = {w0r, wpr, wpr, wpr, wpr, wsr, wsr, wsr, wsr};
+	double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
 
-	double omusq = 1.0 - B*(ux*ux + uy*uy);
+	// Calculating the regularized recursive distribution
+	double a[10], H[10];
+	for(int n = 0; n < q; ++n){
+		hermite_polynomial(ex_d[n], ey_d[n], cs, H);
+		hermite_moments(rho, ux, uy, tau_xx, tau_xy, tau_yy, a);
 
-	// Approximation of fneq
-	f0neq[gpu_field0_index(x, y)] = f[0] - Wrho[0]*omusq;
-	for(int n = 1; n < q; ++n){
-		double eidotu = ux*ex_d[n] + uy*ey_d[n];
-		double feq = Wrho[n]*(omusq + A*eidotu*(1.0 + B*eidotu));
-		f1neq[gpu_fieldn_index(x, y, n)] = f[n] - feq;
+		//					f 			  = W *  (   0      + A*(    x     +     y)     + B*(    xx    +     xy/yx   +    yy)     + C*(   xxx    +    yxx    +    xyy    +    yyy))
+		if(n == 0){
+			f0rec[gpu_field0_index(x, y)] = W[n]*(a[0]*H[0] + A*(a[1]*H[1] + a[2]*H[2]) + B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]) + C*(a[6]*H[6] + a[7]*H[7] + a[8]*H[8] + a[9]*H[9]));
+		}
+		else{
+			f1rec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + A*(a[1]*H[1] + a[2]*H[2]) + B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]) + C*(a[6]*H[6] + a[7]*H[7] + a[8]*H[8] + a[9]*H[9]));
+		}
 	}
 
-	// Calculating the Viscous stress tensor
-	double tauxx = 0, tauxy = 0, tauyy = 0;
+	// Collision Step
 	for(int n = 1; n < q; ++n){
-		tauxx += f1neq[gpu_fieldn_index(x, y, n)]*ex_d[n]*ex_d[n];
-		tauxy += f1neq[gpu_fieldn_index(x, y, n)]*ex_d[n]*ey_d[n];
-		tauyy += f1neq[gpu_fieldn_index(x, y, n)]*ey_d[n]*ey_d[n];
-	}
-
-	f0[gpu_field0_index(x, y)] = (1.0 - omega)*f0neq[gpu_field0_index(x, y)] + Wrho[0]*(omusq);
-
-	for(int n = 1; n < q; ++n){
-		f1neq[gpu_fieldn_index(x, y, n)] = B*W[n]*(tauxx*(A*ex_d[n]*ex_d[n] - 1.0) + 2.0*tauxy*A*ex_d[n]*ey_d[n] + tauyy*(A*ey_d[n]*ey_d[n] - 1.0));
-		double eidotu = ux*ex_d[n] + uy*ey_d[n];
-		double feq = Wrho[n]*(omusq + A*eidotu*(1.0 + B*eidotu));
-		f2[gpu_fieldn_index(x, y, n)] = (1.0 - omega)*f1neq[gpu_fieldn_index(x, y, n)] + feq;
+		
+		f2[gpu_fieldn_index(x, y, n)] = omega*feq + (1 - omega)*f1rec[gpu_fieldn_index(x, y, n)];
 	}
 
 	bool node_solid = solid_d[gpu_scalar_index(x, y)];
 
+	// Applying Boundary Conditions
 	if(node_solid){
 		gpu_bounce_back(x, y, f2);
 	}
