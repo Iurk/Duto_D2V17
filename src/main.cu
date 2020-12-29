@@ -21,6 +21,7 @@ int main(int argc, char const *argv[]){
 	printf("        Save every: %u\n", NSAVE);
 	printf("     Message every: %u\n", NMSG);
 	printf("Velocity Tolerance: %g\n", erro_max);
+	printf("\n");
 
 	double bytesPerMiB = 1024.0*1024.0;
 	double bytesPerGiB = 1024.0*1024.0*1024.0;
@@ -102,8 +103,8 @@ int main(int argc, char const *argv[]){
 	initialization(uy_gpu, 0.0);
 
 	init_equilibrium(f0_gpu, f1_gpu, rho_gpu, ux_gpu, uy_gpu);
-	checkCudaErrors(cudaMemset(f0neq_gpu, 0, mem_size_0dir));
-	checkCudaErrors(cudaMemset(f1neq_gpu, 0, mem_size_n0dir));
+	checkCudaErrors(cudaMemset(f0rec_gpu, 0, mem_size_0dir));
+	checkCudaErrors(cudaMemset(f1rec_gpu, 0, mem_size_n0dir));
 
 	save_scalar("rho",rho_gpu, scalar_host, 0);
 	save_scalar("ux", ux_gpu, scalar_host, 0);
