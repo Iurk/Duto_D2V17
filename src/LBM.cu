@@ -48,11 +48,11 @@ __global__ void gpu_print_mesh(int);
 __global__ void gpu_initialization(double*, double);
 
 // Equilibrium
-__device__ void gpu_init_equilibrium(){
+__device__ void gpu_equilibrium(double as_d, double rho, double ux, double uy, double *f0, double *f){
 	
 }
 
-// Hermite
+// Hermites
 __device__ void hermite_polynomial(int ex, int ey, double cs, double *H){
 
 	H[0] = 1;								// 0
@@ -79,7 +79,7 @@ __device__ void hermite_moments(double rho, double ux, double uy, double tauxx, 
 	a[6] = rho*pow(ux, 3) + 3*ux*tauxx;					// 3 - xxx
 	a[7] = rho*pow(ux, 2)*uy + 2*ux*tauxy + uy*tauxx;	// 3 - yxx
 	a[8] = rho*ux*pow(uy, 2) + 2*uy*tauxy + ux*tauyy;	// 3 - xyy
-	a[9] = rho*pow(uy, 3) + 3*uy*tauyy;				// 3 - yyy
+	a[9] = rho*pow(uy, 3) + 3*uy*tauyy;					// 3 - yyy
 }
 
 // Poiseulle Flow
@@ -126,19 +126,15 @@ __global__ void gpu_init_equilibrium(double *f0, double *f1, double *r, double *
 	double ux = u[gpu_scalar_index(x, y)];
 	double uy = v[gpu_scalar_index(x, y)];
 
+	//gpu_equilibrium(as_d, rho, ux, uy, f0, f1);
+
 	double cs = 1.0/as_d;
 
 	double A = 1.0/(pow(cs, 2));
 	double B = 1.0/(2.0*pow(cs, 4));
 	double C = 1.0/(6.0*pow(cs, 6));
 
-	double w0r = w0_d*rho;
-	double wpr = wp_d*rho;
-	double wsr = ws_d*rho;
-	double wtr = wt_d*rho;
-	double wqr = wq_d*rho;
-
-	double Wrho[] = {w0r, wpr, wpr, wpr, wpr, wsr, wsr, wsr, wsr, wtr, wtr, wtr, wtr, wqr, wqr, wqr, wqr};
+	double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
 
 	for(int n = 0; n < q; ++n){
 		double order_1 = A*(ux*ex_d[n] + uy*ey_d[n]);
@@ -148,15 +144,16 @@ __global__ void gpu_init_equilibrium(double *f0, double *f1, double *r, double *
 		double yxx = pow(ux, 2)*uy*(pow(ex_d[n], 2)*ey_d[n] - ey_d[n]*pow(cs, 2));
 		double xyy = ux*pow(uy, 2)*(ex_d[n]*pow(ey_d[n], 2) - ex_d[n]*pow(cs, 2));
 		double yyy = pow(uy, 3)*(pow(ey_d[n], 3) - 3*ey_d[n]*pow(cs, 2));
-		double order_3 = C*(xxx + yxx + xyy + yyy);
+		double order_3 = C*(xxx + 3*yxx + 3*xyy + yyy);
 
 		if (n == 0){
-			f0[gpu_field0_index(x, y)] = Wrho[n]*(1 + order_1 + order_2 + order_3);
+			f0[gpu_field0_index(x, y)] = W[n]*rho*(1 + order_1 + order_2 + order_3);
 		}
 		else{
-			f1[gpu_fieldn_index(x, y, n)] = Wrho[n]*(1 + order_1 + order_2 + order_3);
+			f1[gpu_fieldn_index(x, y, n)] = W[n]*rho*(1 + order_1 + order_2 + order_3);
 		}
 	}
+
 }
 
 __host__ void stream_collide_save(double *f0, double *f1, double *f2, double *f0neq, double *f1neq, double *r, double *u, double *v, bool save){
@@ -248,12 +245,6 @@ __global__ void gpu_stream_collide_save(double *f0, double *f1, double *f2, doub
 	double B = 1.0/(2.0*pow(cs, 4));
 	double C = 1.0/(6.0*pow(cs, 6));
 
-	double w0r = w0_d*rho;
-	double wpr = wp_d*rho;
-	double wsr = ws_d*rho;
-	double wtr = wt_d*rho;
-	double wqr = wq_d*rho;
-
 	double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
 
 	// Calculating the regularized recursive distribution
@@ -264,16 +255,28 @@ __global__ void gpu_stream_collide_save(double *f0, double *f1, double *f2, doub
 
 		//					f 			  = W *  (   0      + A*(    x     +     y)     + B*(    xx    +     xy/yx   +    yy)     + C*(   xxx    +    yxx    +    xyy    +    yyy))
 		if(n == 0){
-			f0rec[gpu_field0_index(x, y)] = W[n]*(a[0]*H[0] + A*(a[1]*H[1] + a[2]*H[2]) + B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]) + C*(a[6]*H[6] + a[7]*H[7] + a[8]*H[8] + a[9]*H[9]));
+			f0rec[gpu_field0_index(x, y)] = W[n]*(a[0]*H[0] + A*(a[1]*H[1] + a[2]*H[2]) + B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]) + C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]));
 		}
 		else{
-			f1rec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + A*(a[1]*H[1] + a[2]*H[2]) + B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]) + C*(a[6]*H[6] + a[7]*H[7] + a[8]*H[8] + a[9]*H[9]));
+			f1rec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + A*(a[1]*H[1] + a[2]*H[2]) + B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]) + C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]));
 		}
 	}
 
 	// Collision Step
+	double feq;
 	for(int n = 1; n < q; ++n){
+		//gpu_equilibrium(as_d, rho, ux, uy, f0, feq);
+		double order_1 = A*(ux*ex_d[n] + uy*ey_d[n]);
+		double order_2 = B*(pow(ux, 2)*(pow(ex_d[n], 2) - pow(cs, 2)) + 2*ux*uy*ex_d[n]*ey_d[n] + pow(uy, 2)*(pow(ey_d[n], 2) - pow(cs, 2)));
 		
+		double xxx = pow(ux, 3)*(pow(ex_d[n], 3) - 3*ex_d[n]*pow(cs, 2));
+		double yxx = pow(ux, 2)*uy*(pow(ex_d[n], 2)*ey_d[n] - ey_d[n]*pow(cs, 2));
+		double xyy = ux*pow(uy, 2)*(ex_d[n]*pow(ey_d[n], 2) - ex_d[n]*pow(cs, 2));
+		double yyy = pow(uy, 3)*(pow(ey_d[n], 3) - 3*ey_d[n]*pow(cs, 2));
+		double order_3 = C*(xxx + 3*yxx + 3*xyy + yyy);
+
+		feq = W[n]*rho*(1 + order_1 + order_2 + order_3);
+
 		f2[gpu_fieldn_index(x, y, n)] = omega*feq + (1 - omega)*f1rec[gpu_fieldn_index(x, y, n)];
 	}
 
