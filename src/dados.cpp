@@ -67,8 +67,7 @@ namespace myGlobals{
 
 	//Memory Sizes
 	const size_t mem_mesh = sizeof(bool)*Nx*Ny;
-	const size_t mem_size_0dir = sizeof(double)*Nx*Ny;
-	const size_t mem_size_n0dir = sizeof(double)*Nx*Ny*(ndir - 1);
+	const size_t mem_size_ndir = sizeof(double)*Nx*Ny*ndir;
 	const size_t mem_size_scalar = sizeof(double)*Nx*Ny;
 
 	// Nu and Tau

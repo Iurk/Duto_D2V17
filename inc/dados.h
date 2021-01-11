@@ -32,8 +32,7 @@ namespace myGlobals{
 
 	//Memory Sizes
 	extern const size_t mem_mesh;
-	extern const size_t mem_size_0dir;
-	extern const size_t mem_size_n0dir;
+	extern const size_t mem_size_ndir;
 	extern const size_t mem_size_scalar;
 
 	extern bool *solid;
