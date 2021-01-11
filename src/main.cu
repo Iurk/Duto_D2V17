@@ -47,16 +47,15 @@ int main(int argc, char const *argv[]){
 	printf("\n");
 
 	// Declaration and Allocation in device Memory
-	double *f0_gpu, *f1_gpu, *f2_gpu;
-	double *f0rec_gpu, *f1rec_gpu;
+	double *f1_gpu, *f2_gpu, *f1rec_gpu, *feq_gpu, *feqaux_gpu;
 	double *rho_gpu, *ux_gpu, *uy_gpu;
 	double *prop_gpu;
 
-	checkCudaErrors(cudaMalloc((void**)&f0_gpu, mem_size_0dir));
-	checkCudaErrors(cudaMalloc((void**)&f1_gpu, mem_size_n0dir));
-	checkCudaErrors(cudaMalloc((void**)&f2_gpu, mem_size_n0dir));
-	checkCudaErrors(cudaMalloc((void**)&f0rec_gpu, mem_size_0dir));
-	checkCudaErrors(cudaMalloc((void**)&f1rec_gpu, mem_size_n0dir));
+	checkCudaErrors(cudaMalloc((void**)&f1_gpu, mem_size_ndir));
+	checkCudaErrors(cudaMalloc((void**)&f2_gpu, mem_size_ndir));
+	checkCudaErrors(cudaMalloc((void**)&f1rec_gpu, mem_size_ndir));
+	checkCudaErrors(cudaMalloc((void**)&feq_gpu, mem_size_ndir));
+	checkCudaErrors(cudaMalloc((void**)&feqaux_gpu, mem_size_ndir));
 	checkCudaErrors(cudaMalloc((void**)&rho_gpu, mem_size_scalar));
 	checkCudaErrors(cudaMalloc((void**)&ux_gpu, mem_size_scalar));
 	checkCudaErrors(cudaMalloc((void**)&uy_gpu, mem_size_scalar));
@@ -71,7 +70,7 @@ int main(int argc, char const *argv[]){
 		exit(-1);
 	}
 
-	size_t total_mem_bytes = mem_size_0dir + 2*mem_size_n0dir + 3*mem_size_scalar + mem_size_props;
+	size_t total_mem_bytes = 4*mem_size_ndir + 3*mem_size_scalar + mem_size_props;
 	
 	// Creating Events for time measure
 	cudaEvent_t start, stop;
@@ -102,9 +101,8 @@ int main(int argc, char const *argv[]){
 	initialization(ux_gpu, u_max);
 	initialization(uy_gpu, 0.0);
 
-	init_equilibrium(f0_gpu, f1_gpu, rho_gpu, ux_gpu, uy_gpu);
-	checkCudaErrors(cudaMemset(f0rec_gpu, 0, mem_size_0dir));
-	checkCudaErrors(cudaMemset(f1rec_gpu, 0, mem_size_n0dir));
+	init_equilibrium(f1_gpu, rho_gpu, ux_gpu, uy_gpu);
+	checkCudaErrors(cudaMemset(f1rec_gpu, 0, mem_size_ndir));
 
 	save_scalar("rho",rho_gpu, scalar_host, 0);
 	save_scalar("ux", ux_gpu, scalar_host, 0);
@@ -135,7 +133,7 @@ int main(int argc, char const *argv[]){
 			std::cout << std::endl;
 		}
 */
-		stream_collide_save(f0_gpu, f1_gpu, f2_gpu, f0rec_gpu, f1rec_gpu, rho_gpu, ux_gpu, uy_gpu, need_scalars);
+		stream_collide_save(f1_gpu, f2_gpu, f1rec_gpu, feq_gpu, feqaux_gpu, rho_gpu, ux_gpu, uy_gpu, need_scalars);
 
 		if(save){
 			save_scalar("rho",rho_gpu, scalar_host, n+1);
@@ -193,11 +191,11 @@ int main(int argc, char const *argv[]){
 
 	// Freeing Device and CPU Memory
 	// LBM variables
-	checkCudaErrors(cudaFree(f0_gpu));
 	checkCudaErrors(cudaFree(f1_gpu));
 	checkCudaErrors(cudaFree(f2_gpu));
-	checkCudaErrors(cudaFree(f0rec_gpu));
 	checkCudaErrors(cudaFree(f1rec_gpu));
+	checkCudaErrors(cudaFree(feq_gpu));
+	checkCudaErrors(cudaFree(feqaux_gpu));
 	checkCudaErrors(cudaFree(rho_gpu));
 	checkCudaErrors(cudaFree(ux_gpu));
 	checkCudaErrors(cudaFree(uy_gpu));
