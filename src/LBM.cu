@@ -115,15 +115,10 @@ __device__ void gpu_bounce_back(unsigned int x, unsigned int y, double *f){
 		f[gpu_fieldn_index(x, y, 5)] = f[gpu_fieldn_index(x, y, 7)];
 		f[gpu_fieldn_index(x, y, 6)] = f[gpu_fieldn_index(x, y, 8)];
 
-		//f[gpu_fieldn_index(x, y, 9)] = f[gpu_fieldn_index(x+1, y+1, 11)];
-		//f[gpu_fieldn_index(x, y, 10)] = f[gpu_fieldn_index(x-1, y+1, 12)];
+		f[gpu_fieldn_index(x, y, 9)] = f[gpu_fieldn_index(x+1, y+1, 11)];
+		f[gpu_fieldn_index(x, y, 10)] = f[gpu_fieldn_index(x-1, y+1, 12)];
 
-		//f[gpu_fieldn_index(x, y, 14)] = f[gpu_fieldn_index(x, y+2, 16)];
-
-		f[gpu_fieldn_index(x+1, y+1, 9)] = f[gpu_fieldn_index(x, y, 11)];
-		f[gpu_fieldn_index(x-1, y+1, 10)] = f[gpu_fieldn_index(x, y, 12)];
-
-		f[gpu_fieldn_index(x, y+2, 14)] = f[gpu_fieldn_index(x, y, 16)];
+		f[gpu_fieldn_index(x, y, 14)] = f[gpu_fieldn_index(x, y+2, 16)];
 	}
 
 	if(y == Ny_d-1){
@@ -131,56 +126,11 @@ __device__ void gpu_bounce_back(unsigned int x, unsigned int y, double *f){
 		f[gpu_fieldn_index(x, y, 7)] = f[gpu_fieldn_index(x, y, 5)];
 		f[gpu_fieldn_index(x, y, 8)] = f[gpu_fieldn_index(x, y, 6)];
 
-		//f[gpu_fieldn_index(x, y, 11)] = f[gpu_fieldn_index(x-1, y-1, 9)];
-		//f[gpu_fieldn_index(x, y, 12)] = f[gpu_fieldn_index(x+1, y-1, 10)];
+		f[gpu_fieldn_index(x, y, 11)] = f[gpu_fieldn_index(x-1, y-1, 9)];
+		f[gpu_fieldn_index(x, y, 12)] = f[gpu_fieldn_index(x+1, y-1, 10)];
 
-		//f[gpu_fieldn_index(x, y, 16)] = f[gpu_fieldn_index(x, y-2, 14)];
-
-		f[gpu_fieldn_index(x-1, y-1, 11)] = f[gpu_fieldn_index(x, y, 9)];
-		f[gpu_fieldn_index(x+1, y-1, 12)] = f[gpu_fieldn_index(x, y, 10)];
-
-		f[gpu_fieldn_index(x, y-2, 16)] = f[gpu_fieldn_index(x, y, 14)];
+		f[gpu_fieldn_index(x, y, 16)] = f[gpu_fieldn_index(x, y-2, 14)];
 	}
-}
-
-__device__ void gpu_PPBC_inlet(unsigned int x, unsigned int y, double *u, double *v, double *f, double *feq, double *feq_aux){
-
-	double cs = 1.0/as_d;
-
-	// Variables to periodic condition with pressure variation
-	double gradP = -8*u_max_d*mi_ar_d/(pow(Ny_d, 2) - 2*Ny_d);
-	double gradRho = (Nx_d/(pow(cs, 2)))*gradP;
-
-	double rho_in = rho0_d;
-	double rho_out = rho_in + gradRho;
-
-	double ux = u[gpu_scalar_index(Nx_d-1 - x, y)];
-	double uy = v[gpu_scalar_index(Nx_d-1 - x, y)];
-
-	for(int n = 0; n < q; ++n){
-		gpu_equilibrium(x, y, rho_in, ux, uy, feq_aux);
-		f[gpu_fieldn_index(x, y, n)] = feq_aux[n] + (f[gpu_fieldn_index(Nx_d-1 - x, y, n)] - feq[gpu_fieldn_index(Nx_d-1 - x, y, n)]);
-	}
-}
-
-__device__ void gpu_PPBC_outlet(unsigned int x, unsigned int y, double *u, double *v, double *f, double *feq, double *feq_aux){
-
-	double cs = 1.0/as_d;
-
-	// Variables to periodic condition with pressure variation
-	double gradP = -8*u_max_d*mi_ar_d/(pow(Ny_d, 2) - 2*Ny_d);
-	double gradRho = (Nx_d/(pow(cs, 2)))*gradP;
-
-	double rho_in = rho0_d;
-	double rho_out = rho_in + gradRho;
-
-	double ux = u[gpu_scalar_index(Nx_d-1 - x, y)];
-	double uy = v[gpu_scalar_index(Nx_d-1 - x, y)];
-
-	for(int n = 0; n < q; ++n){
-			gpu_equilibrium(x, y, rho_out, ux, uy, feq_aux);
-			f[gpu_fieldn_index(x, y, n)] = feq_aux[n] + (f[gpu_fieldn_index(Nx_d-1 - x, y, n)] - feq[gpu_fieldn_index(Nx_d-1 - x, y, n)]);	// Periodic with pressure Outlet
-		}
 }
 
 __host__ void init_equilibrium(double *f1, double *r, double *u, double *v){
@@ -226,13 +176,14 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 	unsigned int xf, yf, xb, yb;
 
 	// Streaming Step
+	double ft0 = f1[gpu_fieldn_index(x, y, 0)];
+
 	// 1 - 8 directions
 	xf = (x + 1)%Nx_d;		// Forward
 	yf = (y + 1)%Ny_d;		// Forward
 	xb = (Nx_d + x - 1)%Nx_d;	// Backward
 	yb = (Ny_d + y - 1)%Ny_d; // Backward
 
-	double ft0 = f1[gpu_fieldn_index(x, y, 0)];
 	double ft1 = f1[gpu_fieldn_index(xb, y, 1)];
 	double ft2 = f1[gpu_fieldn_index(x, yb, 2)];
 	double ft3 = f1[gpu_fieldn_index(xf, y, 3)];
@@ -302,37 +253,26 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 		//					f 			  = W *  (   0      + A*(    x     +     y)     + B*(    xx    +     xy/yx   +    yy)     + C*(   xxx    +    yxx    +    xyy    +    yyy))
 		f1rec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + A*(a[1]*H[1] + a[2]*H[2]) + B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]) + C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]));
 	}
-
-	// Collision Step
-	for(int n = 0; n < q; ++n){
-		gpu_equilibrium(x, y, rho, ux, uy, feq);
-		f2[gpu_fieldn_index(x, y, n)] = omega*feq[n] + (1 - omega)*f1rec[gpu_fieldn_index(x, y, n)];
-	}
 /*
-	if(x == 0){
-		gpu_PPBC_inlet(x, y, u, v, f2, feq, feq_aux);
-	}
-
-	if(x == 1){
-		gpu_PPBC_inlet(x, y, u, v, f2, feq, feq_aux);
-	}
-
-	if(x == 2){
-		gpu_PPBC_inlet(x, y, u, v, f2, feq, feq_aux);
-	}
-
-	if(x == Nx_d-1){
-		gpu_PPBC_outlet(x, y, u, v, f2, feq, feq_aux);
-	}
-
-	if(x == Nx_d-2){
-		gpu_PPBC_outlet(x, y, u, v, f2, feq, feq_aux);
-	}
-
-	if(x == Nx_d-3){
-		gpu_PPBC_outlet(x, y, u, v, f2, feq, feq_aux);
+	if(x == 3){
+		if(y == 3){
+			printf("rho: %g ux: %g uy: %g\n", rho, ux, uy);
+			printf("frec\n");
+			printf("f0: %g f1: %g f2: %g\n", f1rec[gpu_fieldn_index(x, y, 0)], f1rec[gpu_fieldn_index(x, y, 1)], f1rec[gpu_fieldn_index(x, y, 2)]);
+			printf("f3: %g f4: %g f5: %g\n", f1rec[gpu_fieldn_index(x, y, 3)], f1rec[gpu_fieldn_index(x, y, 4)], f1rec[gpu_fieldn_index(x, y, 5)]);
+			printf("f6: %g f7: %g f8: %g\n", f1rec[gpu_fieldn_index(x, y, 6)], f1rec[gpu_fieldn_index(x, y, 7)], f1rec[gpu_fieldn_index(x, y, 8)]);
+			printf("f9: %g f190: %g f11: %g\n", f1rec[gpu_fieldn_index(x, y, 9)], f1rec[gpu_fieldn_index(x, y, 10)], f1rec[gpu_fieldn_index(x, y, 11)]);
+			printf("f12: %g f13: %g f14: %g\n", f1rec[gpu_fieldn_index(x, y, 12)], f1rec[gpu_fieldn_index(x, y, 13)], f1rec[gpu_fieldn_index(x, y, 14)]);
+			printf("f15: %g f16: %g \n", f1rec[gpu_fieldn_index(x, y, 15)], f1rec[gpu_fieldn_index(x, y, 16)]);
+		}
 	}
 */
+	// Collision Step
+	gpu_equilibrium(x, y, rho, ux, uy, feq);
+	for(int n = 0; n < q; ++n){
+		f2[gpu_fieldn_index(x, y, n)] = omega*feq[gpu_fieldn_index(x, y, n)] + (1 - omega)*f1rec[gpu_fieldn_index(x, y, n)];
+	}
+
 	bool node_solid = solid_d[gpu_scalar_index(x, y)];
 
 	// Applying Boundary Conditions
