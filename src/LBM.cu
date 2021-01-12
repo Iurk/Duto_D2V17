@@ -115,10 +115,15 @@ __device__ void gpu_bounce_back(unsigned int x, unsigned int y, double *f){
 		f[gpu_fieldn_index(x, y, 5)] = f[gpu_fieldn_index(x, y, 7)];
 		f[gpu_fieldn_index(x, y, 6)] = f[gpu_fieldn_index(x, y, 8)];
 
-		f[gpu_fieldn_index(x, y, 9)] = f[gpu_fieldn_index(x+1, y+1, 11)];
-		f[gpu_fieldn_index(x, y, 10)] = f[gpu_fieldn_index(x-1, y+1, 12)];
+		//f[gpu_fieldn_index(x, y, 9)] = f[gpu_fieldn_index(x+1, y+1, 11)];
+		//f[gpu_fieldn_index(x, y, 10)] = f[gpu_fieldn_index(x-1, y+1, 12)];
 
-		f[gpu_fieldn_index(x, y, 14)] = f[gpu_fieldn_index(x, y+2, 16)];
+		//f[gpu_fieldn_index(x, y, 14)] = f[gpu_fieldn_index(x, y+2, 16)];
+
+		f[gpu_fieldn_index(x+1, y+1, 9)] = f[gpu_fieldn_index(x, y, 11)];
+		f[gpu_fieldn_index(x-1, y+1, 10)] = f[gpu_fieldn_index(x, y, 12)];
+
+		f[gpu_fieldn_index(x, y+2, 14)] = f[gpu_fieldn_index(x, y, 16)];
 	}
 
 	if(y == Ny_d-1){
@@ -126,11 +131,56 @@ __device__ void gpu_bounce_back(unsigned int x, unsigned int y, double *f){
 		f[gpu_fieldn_index(x, y, 7)] = f[gpu_fieldn_index(x, y, 5)];
 		f[gpu_fieldn_index(x, y, 8)] = f[gpu_fieldn_index(x, y, 6)];
 
-		f[gpu_fieldn_index(x, y, 11)] = f[gpu_fieldn_index(x-1, y-1, 9)];
-		f[gpu_fieldn_index(x, y, 12)] = f[gpu_fieldn_index(x+1, y-1, 10)];
+		//f[gpu_fieldn_index(x, y, 11)] = f[gpu_fieldn_index(x-1, y-1, 9)];
+		//f[gpu_fieldn_index(x, y, 12)] = f[gpu_fieldn_index(x+1, y-1, 10)];
 
-		f[gpu_fieldn_index(x, y, 16)] = f[gpu_fieldn_index(x, y-2, 14)];
+		//f[gpu_fieldn_index(x, y, 16)] = f[gpu_fieldn_index(x, y-2, 14)];
+
+		f[gpu_fieldn_index(x-1, y-1, 11)] = f[gpu_fieldn_index(x, y, 9)];
+		f[gpu_fieldn_index(x+1, y-1, 12)] = f[gpu_fieldn_index(x, y, 10)];
+
+		f[gpu_fieldn_index(x, y-2, 16)] = f[gpu_fieldn_index(x, y, 14)];
 	}
+}
+
+__device__ void gpu_PPBC_inlet(unsigned int x, unsigned int y, double *u, double *v, double *f, double *feq, double *feq_aux){
+
+	double cs = 1.0/as_d;
+
+	// Variables to periodic condition with pressure variation
+	double gradP = -8*u_max_d*mi_ar_d/(pow(Ny_d, 2) - 2*Ny_d);
+	double gradRho = (Nx_d/(pow(cs, 2)))*gradP;
+
+	double rho_in = rho0_d;
+	double rho_out = rho_in + gradRho;
+
+	double ux = u[gpu_scalar_index(Nx_d-1 - x, y)];
+	double uy = v[gpu_scalar_index(Nx_d-1 - x, y)];
+
+	for(int n = 0; n < q; ++n){
+		gpu_equilibrium(x, y, rho_in, ux, uy, feq_aux);
+		f[gpu_fieldn_index(x, y, n)] = feq_aux[n] + (f[gpu_fieldn_index(Nx_d-1 - x, y, n)] - feq[gpu_fieldn_index(Nx_d-1 - x, y, n)]);
+	}
+}
+
+__device__ void gpu_PPBC_outlet(unsigned int x, unsigned int y, double *u, double *v, double *f, double *feq, double *feq_aux){
+
+	double cs = 1.0/as_d;
+
+	// Variables to periodic condition with pressure variation
+	double gradP = -8*u_max_d*mi_ar_d/(pow(Ny_d, 2) - 2*Ny_d);
+	double gradRho = (Nx_d/(pow(cs, 2)))*gradP;
+
+	double rho_in = rho0_d;
+	double rho_out = rho_in + gradRho;
+
+	double ux = u[gpu_scalar_index(Nx_d-1 - x, y)];
+	double uy = v[gpu_scalar_index(Nx_d-1 - x, y)];
+
+	for(int n = 0; n < q; ++n){
+			gpu_equilibrium(x, y, rho_out, ux, uy, feq_aux);
+			f[gpu_fieldn_index(x, y, n)] = feq_aux[n] + (f[gpu_fieldn_index(Nx_d-1 - x, y, n)] - feq[gpu_fieldn_index(Nx_d-1 - x, y, n)]);	// Periodic with pressure Outlet
+		}
 }
 
 __host__ void init_equilibrium(double *f1, double *r, double *u, double *v){
@@ -258,33 +308,31 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 		gpu_equilibrium(x, y, rho, ux, uy, feq);
 		f2[gpu_fieldn_index(x, y, n)] = omega*feq[n] + (1 - omega)*f1rec[gpu_fieldn_index(x, y, n)];
 	}
-
-	// Variables to periodic condition with pressure variation
-	double gradP = -8*u_max_d*mi_ar_d/(pow(Ny_d, 2) - 2*Ny_d);
-	double gradRho = (Nx_d/(pow(cs, 2)))*gradP;
-
-	double rho_in = rho0_d;
-	double rho_out = rho_in + gradRho;
-
-
+/*
 	if(x == 0){
-		ux = u[gpu_scalar_index(Nx_d-1, y)];
-		uy = v[gpu_scalar_index(Nx_d-1, y)];
-		for (int n = 0; n < q; ++n){
-			gpu_equilibrium(x, y, rho_in, ux, uy, feq_aux);
-			f2[gpu_fieldn_index(0, y, n)] = feq_aux[n] + (f2[gpu_fieldn_index(Nx_d-1, y, n)] - feq[gpu_fieldn_index(Nx_d-1, y, n)]);		// Periodic with pressure Inlet
-		}
+		gpu_PPBC_inlet(x, y, u, v, f2, feq, feq_aux);
+	}
+
+	if(x == 1){
+		gpu_PPBC_inlet(x, y, u, v, f2, feq, feq_aux);
+	}
+
+	if(x == 2){
+		gpu_PPBC_inlet(x, y, u, v, f2, feq, feq_aux);
 	}
 
 	if(x == Nx_d-1){
-		double ux_out = u[gpu_scalar_index(0, y)];
-		double uy_out = v[gpu_scalar_index(0, y)];
-		for(int n = 0; n < q; ++n){
-			gpu_equilibrium(x, y, rho_out, ux, uy, feq_aux);
-			f2[gpu_fieldn_index(Nx_d-1, y, n)] = feq_aux[n] + (f2[gpu_fieldn_index(0, y, n)] - feq[gpu_fieldn_index(0, y, n)]);	// Periodic with pressure Outlet
-		}
+		gpu_PPBC_outlet(x, y, u, v, f2, feq, feq_aux);
 	}
 
+	if(x == Nx_d-2){
+		gpu_PPBC_outlet(x, y, u, v, f2, feq, feq_aux);
+	}
+
+	if(x == Nx_d-3){
+		gpu_PPBC_outlet(x, y, u, v, f2, feq, feq_aux);
+	}
+*/
 	bool node_solid = solid_d[gpu_scalar_index(x, y)];
 
 	// Applying Boundary Conditions
