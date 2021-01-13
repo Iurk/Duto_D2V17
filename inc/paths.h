@@ -4,6 +4,8 @@
 #include <string>
 
 const std::string folder = "./bin/Results/";
-const std::string solid_mesh = "./bin/Mesh/mesh.bin";
+const std::string walls_mesh = "./bin/Mesh/walls.bin";
+const std::string inlet_mesh = "./bin/Mesh/inlet.bin";
+const std::string outlet_mesh = "./bin/Mesh/outlet.bin";
 
 #endif
