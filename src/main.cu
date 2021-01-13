@@ -47,7 +47,7 @@ int main(int argc, char const *argv[]){
 	printf("\n");
 
 	// Declaration and Allocation in device Memory
-	double *f1_gpu, *f2_gpu, *f1rec_gpu, *feq_gpu, *feqaux_gpu;
+	double *f1_gpu, *f2_gpu, *f1rec_gpu, *feq_gpu, *fneq_gpu;
 	double *rho_gpu, *ux_gpu, *uy_gpu;
 	double *prop_gpu;
 
@@ -55,7 +55,7 @@ int main(int argc, char const *argv[]){
 	checkCudaErrors(cudaMalloc((void**)&f2_gpu, mem_size_ndir));
 	checkCudaErrors(cudaMalloc((void**)&f1rec_gpu, mem_size_ndir));
 	checkCudaErrors(cudaMalloc((void**)&feq_gpu, mem_size_ndir));
-	checkCudaErrors(cudaMalloc((void**)&feqaux_gpu, mem_size_ndir));
+	checkCudaErrors(cudaMalloc((void**)&fneq_gpu, mem_size_ndir));
 	checkCudaErrors(cudaMalloc((void**)&rho_gpu, mem_size_scalar));
 	checkCudaErrors(cudaMalloc((void**)&ux_gpu, mem_size_scalar));
 	checkCudaErrors(cudaMalloc((void**)&uy_gpu, mem_size_scalar));
@@ -88,13 +88,17 @@ int main(int argc, char const *argv[]){
 	ex_gpu = generate_e(ex, "x");
 	ey_gpu = generate_e(ey, "y");
 
-	bool *solid_p;
-	bool *solid_gpu;
+	bool *walls_p, *inlet_p, *outlet_p;
+	bool *walls_gpu, *inlet_gpu, *outlet_gpu;
 
-	solid_p = create_pinned_mesh(solid);
+	walls_p = create_pinned_mesh(walls);
+	inlet_p = create_pinned_mesh(inlet);
+	outlet_p = create_pinned_mesh(outlet);
 
 	// Generating Mesh
-	solid_gpu = generate_mesh(solid_p, "solid");
+	walls_gpu = generate_mesh(walls_p, "walls");
+	inlet_gpu = generate_mesh(inlet_p, "inlet");
+	outlet_gpu = generate_mesh(outlet_p, "outlet");
 
 	// Initialization
 	initialization(rho_gpu, rho0);
@@ -133,7 +137,7 @@ int main(int argc, char const *argv[]){
 			std::cout << std::endl;
 		}
 */
-		stream_collide_save(f1_gpu, f2_gpu, f1rec_gpu, feq_gpu, feqaux_gpu, rho_gpu, ux_gpu, uy_gpu, need_scalars);
+		stream_collide_save(f1_gpu, f2_gpu, f1rec_gpu, feq_gpu, fneq_gpu, rho_gpu, ux_gpu, uy_gpu, need_scalars);
 
 		if(save){
 			save_scalar("rho",rho_gpu, scalar_host, n+1);
@@ -195,7 +199,7 @@ int main(int argc, char const *argv[]){
 	checkCudaErrors(cudaFree(f2_gpu));
 	checkCudaErrors(cudaFree(f1rec_gpu));
 	checkCudaErrors(cudaFree(feq_gpu));
-	checkCudaErrors(cudaFree(feqaux_gpu));
+	checkCudaErrors(cudaFree(fneq_gpu));
 	checkCudaErrors(cudaFree(rho_gpu));
 	checkCudaErrors(cudaFree(ux_gpu));
 	checkCudaErrors(cudaFree(uy_gpu));
@@ -204,8 +208,12 @@ int main(int argc, char const *argv[]){
 	checkCudaErrors(cudaFree(ey_gpu));
 
 	// Mesh arrays
-	checkCudaErrors(cudaFree(solid_gpu));
-	checkCudaErrors(cudaFreeHost(solid_p));
+	checkCudaErrors(cudaFree(walls_gpu));
+	checkCudaErrors(cudaFreeHost(walls_p));
+	checkCudaErrors(cudaFree(inlet_gpu));
+	checkCudaErrors(cudaFreeHost(inlet_p));
+	checkCudaErrors(cudaFree(outlet_gpu));
+	checkCudaErrors(cudaFreeHost(outlet_p));
 
 	// Host arrays
 	checkCudaErrors(cudaFreeHost(scalar_host));
