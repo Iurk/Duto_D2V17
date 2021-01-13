@@ -74,5 +74,8 @@ namespace myGlobals{
 	double nu = (u_max*Nx)/Re;
 	const double tau = nu*(as*as) + 0.5;
 
-	bool *solid = read_bin(solid_mesh);
+	bool *walls = read_bin(walls_mesh);
+	bool *inlet = read_bin(inlet_mesh);
+	bool *outlet = read_bin(outlet_mesh);
+
 }

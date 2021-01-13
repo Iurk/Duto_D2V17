@@ -35,7 +35,7 @@ namespace myGlobals{
 	extern const size_t mem_size_ndir;
 	extern const size_t mem_size_scalar;
 
-	extern bool *solid;
+	extern bool *walls, *inlet, *outlet;
 }
 
 #endif
