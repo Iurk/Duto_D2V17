@@ -27,7 +27,7 @@ __device__ int *ex_d;
 __device__ int *ey_d;
 
 // Mesh data
-__device__ bool *solid_d;
+__device__ bool *walls_d, *inlet_d, *outlet_d;
 
 __device__ __forceinline__ size_t gpu_scalar_index(unsigned int x, unsigned int y){
 	return Nx_d*y + x;
@@ -133,6 +133,32 @@ __device__ void gpu_bounce_back(unsigned int x, unsigned int y, double *f){
 	}
 }
 
+__device__ void gpu_PPBC(unsigned int x, unsigned int y, double rho, double *u, double *v, double *f, double *feq, double *fneq){
+
+	double ux = u[gpu_scalar_index(Nx_d-1 - x, y)];
+	double uy = v[gpu_scalar_index(Nx_d-1 - x, y)];
+
+	gpu_equilibrium(x, y, rho, ux, uy, feq);
+
+	for(int n = 0; n < q; ++n){
+		f[gpu_fieldn_index(x, y, n)] = feq[gpu_fieldn_index(x, y, n)] + fneq[gpu_fieldn_index(Nx_d-1 - x, y, n)];
+	}
+/*
+	if(x == 1){
+		if(y == 3){
+			printf("rho: %g ux: %g uy: %g\n", rho, ux, uy);
+			printf("frec\n");
+			printf("f0: %g f1: %g f2: %g\n", f[gpu_fieldn_index(x, y, 0)], f[gpu_fieldn_index(x, y, 1)], f[gpu_fieldn_index(x, y, 2)]);
+			printf("f3: %g f4: %g f5: %g\n", f[gpu_fieldn_index(x, y, 3)], f[gpu_fieldn_index(x, y, 4)], f[gpu_fieldn_index(x, y, 5)]);
+			printf("f6: %g f7: %g f8: %g\n", f[gpu_fieldn_index(x, y, 6)], f[gpu_fieldn_index(x, y, 7)], f[gpu_fieldn_index(x, y, 8)]);
+			printf("f9: %g f190: %g f11: %g\n", f[gpu_fieldn_index(x, y, 9)], f[gpu_fieldn_index(x, y, 10)], f[gpu_fieldn_index(x, y, 11)]);
+			printf("f12: %g f13: %g f14: %g\n", f[gpu_fieldn_index(x, y, 12)], f[gpu_fieldn_index(x, y, 13)], f[gpu_fieldn_index(x, y, 14)]);
+			printf("f15: %g f16: %g \n", f[gpu_fieldn_index(x, y, 15)], f[gpu_fieldn_index(x, y, 16)]);
+		}
+	}
+*/	
+}
+
 __host__ void init_equilibrium(double *f1, double *r, double *u, double *v){
 
 	dim3 grid(Nx/nThreads, Ny, 1);
@@ -154,7 +180,7 @@ __global__ void gpu_init_equilibrium(double *f1, double *r, double *u, double *v
 	gpu_equilibrium(x, y, rho, ux, uy, f1);
 }
 
-__host__ void stream_collide_save(double *f1, double *f2, double *f1rec, double *feq, double *feq_aux, double *r, double *u, double *v, bool save){
+__host__ void stream_collide_save(double *f1, double *f2, double *f1rec, double *feq, double *fneq, double *r, double *u, double *v, bool save){
 
 	dim3 grid(Nx/nThreads, Ny, 1);
 	dim3 block(nThreads, 1, 1);
@@ -162,11 +188,11 @@ __host__ void stream_collide_save(double *f1, double *f2, double *f1rec, double 
 	//dim3 grid(1,1,1);
 	//dim3 block(1,1,1);
 
-	gpu_stream_collide_save<<< grid, block >>>(f1, f2, f1rec, feq, feq_aux, r, u, v, save);
+	gpu_stream_collide_save<<< grid, block >>>(f1, f2, f1rec, feq, fneq, r, u, v, save);
 	getLastCudaError("gpu_stream_collide_save kernel error");
 }
 
-__global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, double *feq, double *feq_aux, double *r, double *u, double *v, bool save){
+__global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, double *feq, double *fneq, double *r, double *u, double *v, bool save){
 
 	const double omega = 1.0/tau_d;
 
@@ -253,17 +279,30 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 		//					f 			  = W *  (   0      + A*(    x     +     y)     + B*(    xx    +     xy/yx   +    yy)     + C*(   xxx    +    yxx    +    xyy    +    yyy))
 		f1rec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + A*(a[1]*H[1] + a[2]*H[2]) + B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]) + C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]));
 	}
+
+	// Calculating the non-equilibrium distribution
+	for(int n = 0; n < q; ++n){
+		double order_1 = B*(tau_xx*(pow(ex_d[n], 2) - pow(cs, 2)) + 2*tau_xy*ex_d[n]*ey_d[n] + tau_yy*(pow(ey_d[n], 2) - pow(cs, 2)));
+
+		double xxx = 3*ux*tau_xx*(pow(ex_d[n], 3) - 3*ex_d[n]*pow(cs, 2));
+		double yxx = (2*ux*tau_xy + uy*tau_xx)*(pow(ex_d[n], 2)*ey_d[n] - ey_d[n]*pow(cs, 2));
+		double xyy = (ux*tau_yy + 2*uy*tau_xy)*(ex_d[n]*pow(ey_d[n], 2) - ex_d[n]*pow(cs, 2));
+		double yyy = 3*uy*tau_yy*(pow(ey_d[n], 3) - 3*ey_d[n]*pow(cs, 2));
+		double order_2 = C*(xxx + 3*yxx + 3*xyy + yyy);
+
+		fneq[gpu_fieldn_index(x, y, n)] = W[n]*(order_1 + order_2);
+	}
 /*
 	if(x == 3){
 		if(y == 3){
 			printf("rho: %g ux: %g uy: %g\n", rho, ux, uy);
-			printf("frec\n");
-			printf("f0: %g f1: %g f2: %g\n", f1rec[gpu_fieldn_index(x, y, 0)], f1rec[gpu_fieldn_index(x, y, 1)], f1rec[gpu_fieldn_index(x, y, 2)]);
-			printf("f3: %g f4: %g f5: %g\n", f1rec[gpu_fieldn_index(x, y, 3)], f1rec[gpu_fieldn_index(x, y, 4)], f1rec[gpu_fieldn_index(x, y, 5)]);
-			printf("f6: %g f7: %g f8: %g\n", f1rec[gpu_fieldn_index(x, y, 6)], f1rec[gpu_fieldn_index(x, y, 7)], f1rec[gpu_fieldn_index(x, y, 8)]);
-			printf("f9: %g f190: %g f11: %g\n", f1rec[gpu_fieldn_index(x, y, 9)], f1rec[gpu_fieldn_index(x, y, 10)], f1rec[gpu_fieldn_index(x, y, 11)]);
-			printf("f12: %g f13: %g f14: %g\n", f1rec[gpu_fieldn_index(x, y, 12)], f1rec[gpu_fieldn_index(x, y, 13)], f1rec[gpu_fieldn_index(x, y, 14)]);
-			printf("f15: %g f16: %g \n", f1rec[gpu_fieldn_index(x, y, 15)], f1rec[gpu_fieldn_index(x, y, 16)]);
+			printf("fneq\n");
+			printf("f0: %g f1: %g f2: %g\n", fneq[gpu_fieldn_index(x, y, 0)], fneq[gpu_fieldn_index(x, y, 1)], fneq[gpu_fieldn_index(x, y, 2)]);
+			printf("f3: %g f4: %g f5: %g\n", fneq[gpu_fieldn_index(x, y, 3)], fneq[gpu_fieldn_index(x, y, 4)], fneq[gpu_fieldn_index(x, y, 5)]);
+			printf("f6: %g f7: %g f8: %g\n", fneq[gpu_fieldn_index(x, y, 6)], fneq[gpu_fieldn_index(x, y, 7)], fneq[gpu_fieldn_index(x, y, 8)]);
+			printf("f9: %g f190: %g f11: %g\n", fneq[gpu_fieldn_index(x, y, 9)], fneq[gpu_fieldn_index(x, y, 10)], fneq[gpu_fieldn_index(x, y, 11)]);
+			printf("f12: %g f13: %g f14: %g\n", fneq[gpu_fieldn_index(x, y, 12)], fneq[gpu_fieldn_index(x, y, 13)], fneq[gpu_fieldn_index(x, y, 14)]);
+			printf("f15: %g f16: %g \n", fneq[gpu_fieldn_index(x, y, 15)], fneq[gpu_fieldn_index(x, y, 16)]);
 		}
 	}
 */
@@ -273,10 +312,44 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 		f2[gpu_fieldn_index(x, y, n)] = omega*feq[gpu_fieldn_index(x, y, n)] + (1 - omega)*f1rec[gpu_fieldn_index(x, y, n)];
 	}
 
-	bool node_solid = solid_d[gpu_scalar_index(x, y)];
+	double gradP = -8*u_max_d*mi_ar_d/(pow(Ny_d, 2) - 2*Ny_d);
+	double gradRho = (Nx_d/pow(cs, 2))*gradP;
+
+	double rho_in = rho0_d;
+	double rho_out = rho_in + gradRho;
+
+	bool node_inlet = inlet_d[gpu_scalar_index(x, y)];
+	bool node_outlet = outlet_d[gpu_scalar_index(x, y)];
+	bool node_walls = walls_d[gpu_scalar_index(x, y)];
+
+	double ux_in = u[gpu_scalar_index(Nx_d-1, y)];
+	double uy_in = v[gpu_scalar_index(Nx_d-1, y)];
+
+	gpu_equilibrium(x, y, rho_in, ux_in, uy_in, feq);
+
+	for(int n = 0; n < q; ++n){
+		f2[gpu_fieldn_index(0, y, n)] = feq[gpu_fieldn_index(0, y, n)] + fneq[gpu_fieldn_index(Nx_d-1, y, n)];
+	}
+
+	double ux_out = u[gpu_scalar_index(0, y)];
+	double uy_out = v[gpu_scalar_index(0, y)];
+
+	gpu_equilibrium(x, y, rho_in, ux_out, uy_out, feq);
+
+	for(int n = 0; n < q; ++n){
+		f2[gpu_fieldn_index(Nx_d-1, y, n)] = feq[gpu_fieldn_index(Nx_d-1, y, n)] + fneq[gpu_fieldn_index(0, y, n)];
+	}
 
 	// Applying Boundary Conditions
-	if(node_solid){
+	if(node_inlet){
+		//gpu_PPBC(x, y, rho_in, u, v, f2, feq, fneq);
+	}
+
+	else if(node_outlet){
+		//gpu_PPBC(x, y, rho_out, u, v, f2, feq, fneq);
+	}
+
+	else if(node_walls){
 		gpu_bounce_back(x, y, f2);
 	}
 
@@ -470,9 +543,19 @@ __host__ bool* generate_mesh(bool *mesh, std::string mode){
 	checkCudaErrors(cudaMemcpy(temp_mesh, mesh, mem_mesh, cudaMemcpyHostToDevice));
 	
 
-	if(mode == "solid"){
-		checkCudaErrors(cudaMemcpyToSymbol(solid_d, &temp_mesh, sizeof(temp_mesh)));
+	if(mode == "walls"){
+		checkCudaErrors(cudaMemcpyToSymbol(walls_d, &temp_mesh, sizeof(temp_mesh)));
 		mode_num = 1;
+	}
+
+	else if(mode == "inlet"){
+		checkCudaErrors(cudaMemcpyToSymbol(inlet_d, &temp_mesh, sizeof(temp_mesh)));
+		mode_num = 2;
+	}
+
+	else if(mode == "outlet"){
+		checkCudaErrors(cudaMemcpyToSymbol(outlet_d, &temp_mesh, sizeof(temp_mesh)));
+		mode_num = 3;
 	}
 
 	if(meshprint){
@@ -487,7 +570,25 @@ __global__ void gpu_print_mesh(int mode){
 	if(mode == 1){
 		for(int y = 0; y < Ny_d; ++y){
 			for(int x = 0; x < Nx_d; ++x){
-				printf("%d ", solid_d[Nx_d*y + x]);
+				printf("%d ", walls_d[Nx_d*y + x]);
+			}
+		printf("\n");
+		}
+	}
+
+	else if(mode == 2){
+		for(int y = 0; y < Ny_d; ++y){
+			for(int x = 0; x < Nx_d; ++x){
+				printf("%d ", inlet_d[Nx_d*y + x]);
+			}
+		printf("\n");
+		}
+	}
+
+	else if(mode == 3){
+		for(int y = 0; y < Ny_d; ++y){
+			for(int x = 0; x < Nx_d; ++x){
+				printf("%d ", outlet_d[Nx_d*y + x]);
 			}
 		printf("\n");
 		}
