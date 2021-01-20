@@ -10,7 +10,7 @@ simulation:
   computeFlowProperties: true
   quiet: true
   meshprint: false
-  erro_max: 1e-3
+  erro_max: 1e-7
 
 gpu:
   nThreads: 32
