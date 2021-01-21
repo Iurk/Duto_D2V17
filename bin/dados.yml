@@ -6,7 +6,7 @@ simulation:
   lattice: D2V17
   NSTEPS: 100000
   NSAVE: 400
-  NMSG: 1
+  NMSG: 1000
   computeFlowProperties: true
   quiet: true
   meshprint: false
