@@ -307,8 +307,9 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 	double feq;
 	for(int n = 0; n < q; ++n){
 		// Calculating the Force term
-		double x_dir = 2*A*ex_d[n] + D*(pow(ex_d[n], 2) - pow(cs, 2))*ux + D*ex_d[n]*ey_d[n]*uy;
-		double y_dir = 2*A*ey_d[n] + D*ex_d[n]*ey_d[n]*ux + D*(pow(ey_d[n], 2) - pow(cs, 2))*uy;
+		double eidotu = ex_d[n]*ux + ey_d[n]*uy;
+		double x_dir = A*(ex_d[n] - ux) + D*ex_d[n]*eidotu;
+		double y_dir = A*(ey_d[n] - uy) + D*ey_d[n]*eidotu;
 
 		F[gpu_fieldn_index(x, y, n)] = W[n]*(x_dir*force_x + y_dir*force_y);
 
