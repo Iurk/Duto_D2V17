@@ -92,7 +92,7 @@ __device__ void hermite_moments(double rho, double ux, double uy, double tauxx, 
 	a[5] = rho*pow(uy, 2) + tauyy;						// 2 - yy
 	a[6] = rho*pow(ux, 3) + 3*ux*tauxx;					// 3 - xxx
 	a[7] = rho*pow(ux, 2)*uy + 2*ux*tauxy + uy*tauxx;	// 3 - yxx
-	a[8] = rho*ux*pow(uy, 2) + 2*uy*tauxy + ux*tauyy;	// 3 - xyy
+	a[8] = rho*ux*pow(uy, 2) + ux*tauyy + 2*uy*tauxy;	// 3 - xyy
 	a[9] = rho*pow(uy, 3) + 3*uy*tauyy;					// 3 - yyy
 }
 
@@ -184,96 +184,22 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 	unsigned int y = blockIdx.y;
 	unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
 
-	const double force_x = 1e-10;
+	const double force_x = 1e-15;
 	const double force_y = 0.0;
 
-	unsigned int xf, yf, xb, yb;
-
-	// Streaming Step
-	double ft0 = f1[gpu_fieldn_index(x, y, 0)];
-
-	// 1 - 8 directions
-	xf = (x + 1)%Nx_d;			// Forward
-	yf = (y + 1)%Ny_d;			// Forward
-	xb = (Nx_d + x - 1)%Nx_d;	// Backward
-	yb = (Ny_d + y - 1)%Ny_d; 	// Backward
-
-	double ft1 = f1[gpu_fieldn_index(xb, y, 1)];
-	double ft2 = f1[gpu_fieldn_index(x, yb, 2)];
-	double ft3 = f1[gpu_fieldn_index(xf, y, 3)];
-	double ft4 = f1[gpu_fieldn_index(x, yf, 4)];
-	double ft5 = f1[gpu_fieldn_index(xb, yb, 5)];
-	double ft6 = f1[gpu_fieldn_index(xf, yb, 6)];
-	double ft7 = f1[gpu_fieldn_index(xf, yf, 7)];
-	double ft8 = f1[gpu_fieldn_index(xb, yf, 8)];
-/*
-	if(x == 1){
-		if(y == 1){
-			printf("1 -> x: %d y: %d\n", xb, y);
-			printf("2 -> x: %d y: %d\n", x, yb);
-			printf("3 -> x: %d y: %d\n", xf, y);
-			printf("4 -> x: %d y: %d\n", x, yf);
-			printf("5 -> x: %d y: %d\n", xb, yb);
-			printf("6 -> x: %d y: %d\n", xf, yb);
-			printf("7 -> x: %d y: %d\n", xf, yf);
-			printf("8 -> x: %d y: %d\n", xb, yf);
-		}
-	}
-*/
-	// 9 - 12 directions
-	xf = (x + 2)%Nx_d;			// Forward
-	yf = (y + 2)%Ny_d;			// Forward
-	xb = (Nx_d + x - 2)%Nx_d;	// Backward
-	yb = (Ny_d + y - 2)%Ny_d; 	// Backward
-
-	double ft9 = f1[gpu_fieldn_index(xb, yb, 9)];
-	double ft10 = f1[gpu_fieldn_index(xf, yb, 10)];
-	double ft11 = f1[gpu_fieldn_index(xf, yf, 11)];
-	double ft12 = f1[gpu_fieldn_index(xb, yf, 12)];
-/*
-	if(x == 1){
-		if(y == 1){
-			printf("9 -> x: %d y: %d\n", xb, yb);
-			printf("10 -> x: %d y: %d\n", xf, yb);
-			printf("11 -> x: %d y: %d\n", xf, yf);
-			printf("12 -> x: %d y: %d\n", xb, yf);
-		}
-	}
-*/
-	// 13 - 16 directions
-	xf = (x + 3)%Nx_d;			// Forward
-	yf = (y + 3)%Ny_d;			// Forward
-	xb = (Nx_d + x - 3)%Nx_d;	// Backward
-	yb = (Ny_d + y - 3)%Ny_d; 	// Backward
-
-	double ft13 = f1[gpu_fieldn_index(xb, y, 13)];
-	double ft14 = f1[gpu_fieldn_index(x, yb, 14)];
-	double ft15 = f1[gpu_fieldn_index(xf, y, 15)];
-	double ft16 = f1[gpu_fieldn_index(x, yf, 16)];
-/*
-	if(x == 1){
-		if(y == 1){
-			printf("13 -> x: %d y: %d\n", xb, y);
-			printf("14 -> x: %d y: %d\n", x, yb);
-			printf("15 -> x: %d y: %d\n", xf, y);
-			printf("16 -> x: %d y: %d\n", x, yf);
-		}
-	}
-*/
-	double f[] = {ft0, ft1, ft2, ft3, ft4, ft5, ft6, ft7, ft8, ft9, ft10, ft11, ft12, ft13, ft14, ft15, ft16};
 	double rho = 0, ux_i = 0, uy_i = 0, tau_xx = 0, tau_xy = 0, tau_yy = 0;
 
 	for(int n = 0; n < q; ++n){
-		rho += f[n];
-		ux_i += (f[n]*ex_d[n] + F[gpu_fieldn_index(x, y, n)]*ex_d[n]/2);
-		uy_i += (f[n]*ey_d[n] + F[gpu_fieldn_index(x, y, n)]*ey_d[n]/2);
-		tau_xx += f[n]*ex_d[n]*ex_d[n];
-		tau_xy += f[n]*ex_d[n]*ey_d[n];
-		tau_yy += f[n]*ey_d[n]*ey_d[n];
+		rho += f1[gpu_fieldn_index(x, y, n)];
+		ux_i += (f1[gpu_fieldn_index(x, y, n)]*ex_d[n]);
+		uy_i += (f1[gpu_fieldn_index(x, y, n)]*ey_d[n]);
+		tau_xx += f1[gpu_fieldn_index(x, y, n)]*ex_d[n]*ex_d[n];
+		tau_xy += f1[gpu_fieldn_index(x, y, n)]*ex_d[n]*ey_d[n];
+		tau_yy += f1[gpu_fieldn_index(x, y, n)]*ey_d[n]*ey_d[n];
 	}
 
-	double ux = ux_i/rho;
-	double uy = uy_i/rho;
+	double ux = ux_i/rho + force_x/(2*rho);
+	double uy = uy_i/rho + force_y/(2*rho);
 
 	r[gpu_scalar_index(x, y)] = rho;
 	u[gpu_scalar_index(x, y)] = ux;
@@ -295,20 +221,20 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 		hermite_polynomial(ex_d[n], ey_d[n], cs, H);
 		hermite_moments(rho, ux, uy, tau_xx, tau_xy, tau_yy, a);
 
-		//					f 			  = W *  (   0      + A*(    x     +     y)     + B*(    xx    +     xy/yx   +    yy)     + C*(   xxx    +    yxx    +    xyy    +    yyy))
+		//					f 			 = W *  (   0      + A*(    x     +     y)     + B*(    xx    +     xy/yx   +    yy)     + C*(   xxx    +    yxx    +    xyy    +    yyy))
 		f1rec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + A*(a[1]*H[1] + a[2]*H[2]) + B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]) + C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]));
 	}
 /*
 	if(x == 3){
 		if(y == 3){
 			printf("rho: %g ux: %g uy: %g\n", rho, ux, uy);
-			printf("fneq\n");
-			printf("f0: %g f1: %g f2: %g\n", fneq[gpu_fieldn_index(x, y, 0)], fneq[gpu_fieldn_index(x, y, 1)], fneq[gpu_fieldn_index(x, y, 2)]);
-			printf("f3: %g f4: %g f5: %g\n", fneq[gpu_fieldn_index(x, y, 3)], fneq[gpu_fieldn_index(x, y, 4)], fneq[gpu_fieldn_index(x, y, 5)]);
-			printf("f6: %g f7: %g f8: %g\n", fneq[gpu_fieldn_index(x, y, 6)], fneq[gpu_fieldn_index(x, y, 7)], fneq[gpu_fieldn_index(x, y, 8)]);
-			printf("f9: %g f190: %g f11: %g\n", fneq[gpu_fieldn_index(x, y, 9)], fneq[gpu_fieldn_index(x, y, 10)], fneq[gpu_fieldn_index(x, y, 11)]);
-			printf("f12: %g f13: %g f14: %g\n", fneq[gpu_fieldn_index(x, y, 12)], fneq[gpu_fieldn_index(x, y, 13)], fneq[gpu_fieldn_index(x, y, 14)]);
-			printf("f15: %g f16: %g \n", fneq[gpu_fieldn_index(x, y, 15)], fneq[gpu_fieldn_index(x, y, 16)]);
+			printf("f1rec\n");
+			printf("f0: %g f1: %g f2: %g\n", f1rec[gpu_fieldn_index(x, y, 0)], f1rec[gpu_fieldn_index(x, y, 1)], f1rec[gpu_fieldn_index(x, y, 2)]);
+			printf("f3: %g f4: %g f5: %g\n", f1rec[gpu_fieldn_index(x, y, 3)], f1rec[gpu_fieldn_index(x, y, 4)], f1rec[gpu_fieldn_index(x, y, 5)]);
+			printf("f6: %g f7: %g f8: %g\n", f1rec[gpu_fieldn_index(x, y, 6)], f1rec[gpu_fieldn_index(x, y, 7)], f1rec[gpu_fieldn_index(x, y, 8)]);
+			printf("f9: %g f190: %g f11: %g\n", f1rec[gpu_fieldn_index(x, y, 9)], f1rec[gpu_fieldn_index(x, y, 10)], f1rec[gpu_fieldn_index(x, y, 11)]);
+			printf("f12: %g f13: %g f14: %g\n", f1rec[gpu_fieldn_index(x, y, 12)], f1rec[gpu_fieldn_index(x, y, 13)], f1rec[gpu_fieldn_index(x, y, 14)]);
+			printf("f15: %g f16: %g \n", f1rec[gpu_fieldn_index(x, y, 15)], f1rec[gpu_fieldn_index(x, y, 16)]);
 		}
 	}
 */
@@ -323,8 +249,22 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 		F[gpu_fieldn_index(x, y, n)] = W[n]*(x_dir*force_x + y_dir*force_y);
 
 		gpu_equilibrium(n, x, y, rho, ux, uy, &feq);
+		if(x == 5){
+			if(y == 5){
+				//printf("n: %d feq: %g\n", n, feq);
+			}
+		}
+		
+		f1[gpu_fieldn_index(x, y, n)] = omega*feq + (1 - omega)*f1rec[gpu_fieldn_index(x, y, n)] + (1 - omega/2)*F[gpu_fieldn_index(x, y, n)];
+	}
 
-		f2[gpu_fieldn_index(x, y, n)] = omega*feq + (1 - omega)*f1rec[gpu_fieldn_index(x, y, n)] + (1 - omega/2)*F[gpu_fieldn_index(x, y, n)];
+	// Streaming Step
+	int x_att, y_att;
+	for(int n = 0; n < q; ++n){
+		x_att = (x + ex_d[n] + Nx_d)%Nx_d;
+		y_att = (y + ey_d[n] + Ny_d)%Ny_d;
+
+		f2[gpu_fieldn_index(x_att, y_att, n)] = f1[gpu_fieldn_index(x, y, n)];
 	}
 
 	bool node_walls = walls_d[gpu_scalar_index(x, y)];
