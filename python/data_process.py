@@ -18,7 +18,7 @@ def plotting(args):
     idx_file, rho, ux, uy = args
     u_mod = np.sqrt(ux**2 + uy**2)
     
-    fg.grafico(u_mod, idx_file, pasta_img)
+    fg.image(u_mod, idx_file, pasta_img)
     
 if __name__ == '__main__':
 
