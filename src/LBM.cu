@@ -114,10 +114,15 @@ __device__ void gpu_bounce_back(unsigned int x, unsigned int y, double *f){
 		f[gpu_fieldn_index(x, y, 5)] = f[gpu_fieldn_index(x, y, 7)];
 		f[gpu_fieldn_index(x, y, 6)] = f[gpu_fieldn_index(x, y, 8)];
 
-		f[gpu_fieldn_index(x, y, 9)] = f[gpu_fieldn_index(x+1, y+1, 11)];
-		f[gpu_fieldn_index(x, y, 10)] = f[gpu_fieldn_index(x-1, y+1, 12)];
+		//f[gpu_fieldn_index(x, y, 9)] = f[gpu_fieldn_index(x+1, y+1, 11)];
+		//f[gpu_fieldn_index(x, y, 10)] = f[gpu_fieldn_index(x-1, y+1, 12)];
 
-		f[gpu_fieldn_index(x, y, 14)] = f[gpu_fieldn_index(x, y+2, 16)];
+		//f[gpu_fieldn_index(x, y, 14)] = f[gpu_fieldn_index(x, y+2, 16)];
+
+		f[gpu_fieldn_index(x+1, y+1, 9)] = f[gpu_fieldn_index(x, y, 11)];
+		f[gpu_fieldn_index(x-1, y+1, 10)] = f[gpu_fieldn_index(x, y, 12)];
+
+		f[gpu_fieldn_index(x, y+2, 14)] = f[gpu_fieldn_index(x, y, 16)];
 	}
 
 	if(y == Ny_d-1){
@@ -125,10 +130,15 @@ __device__ void gpu_bounce_back(unsigned int x, unsigned int y, double *f){
 		f[gpu_fieldn_index(x, y, 7)] = f[gpu_fieldn_index(x, y, 5)];
 		f[gpu_fieldn_index(x, y, 8)] = f[gpu_fieldn_index(x, y, 6)];
 
-		f[gpu_fieldn_index(x, y, 11)] = f[gpu_fieldn_index(x-1, y-1, 9)];
-		f[gpu_fieldn_index(x, y, 12)] = f[gpu_fieldn_index(x+1, y-1, 10)];
+		//f[gpu_fieldn_index(x, y, 11)] = f[gpu_fieldn_index(x-1, y-1, 9)];
+		//f[gpu_fieldn_index(x, y, 12)] = f[gpu_fieldn_index(x+1, y-1, 10)];
 
-		f[gpu_fieldn_index(x, y, 16)] = f[gpu_fieldn_index(x, y-2, 14)];
+		//f[gpu_fieldn_index(x, y, 16)] = f[gpu_fieldn_index(x, y-2, 14)];
+
+		f[gpu_fieldn_index(x-1, y-1, 11)] = f[gpu_fieldn_index(x, y, 9)];
+		f[gpu_fieldn_index(x+1, y-1, 12)] = f[gpu_fieldn_index(x, y, 10)];
+
+		f[gpu_fieldn_index(x, y-2, 16)] = f[gpu_fieldn_index(x, y, 14)];
 	}
 }
 
@@ -174,7 +184,7 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 	unsigned int y = blockIdx.y;
 	unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
 
-	const double force_x = -8*u_max_d*mi_ar_d/(pow(Ny_d, 2) - 2*Ny_d);
+	const double force_x = 1e-10;
 	const double force_y = 0.0;
 
 	unsigned int xf, yf, xb, yb;
@@ -183,10 +193,10 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 	double ft0 = f1[gpu_fieldn_index(x, y, 0)];
 
 	// 1 - 8 directions
-	xf = (x + 1)%Nx_d;		// Forward
-	yf = (y + 1)%Ny_d;		// Forward
+	xf = (x + 1)%Nx_d;			// Forward
+	yf = (y + 1)%Ny_d;			// Forward
 	xb = (Nx_d + x - 1)%Nx_d;	// Backward
-	yb = (Ny_d + y - 1)%Ny_d; // Backward
+	yb = (Ny_d + y - 1)%Ny_d; 	// Backward
 
 	double ft1 = f1[gpu_fieldn_index(xb, y, 1)];
 	double ft2 = f1[gpu_fieldn_index(x, yb, 2)];
@@ -211,10 +221,10 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 	}
 */
 	// 9 - 12 directions
-	xf = (x + 2)%Nx_d;		// Forward
-	yf = (y + 2)%Ny_d;		// Forward
-	xb = (Nx_d + x - 3)%Nx_d;	// Backward
-	yb = (Ny_d + y - 3)%Ny_d; // Backward
+	xf = (x + 2)%Nx_d;			// Forward
+	yf = (y + 2)%Ny_d;			// Forward
+	xb = (Nx_d + x - 2)%Nx_d;	// Backward
+	yb = (Ny_d + y - 2)%Ny_d; 	// Backward
 
 	double ft9 = f1[gpu_fieldn_index(xb, yb, 9)];
 	double ft10 = f1[gpu_fieldn_index(xf, yb, 10)];
@@ -231,10 +241,10 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 	}
 */
 	// 13 - 16 directions
-	xf = (x + 3)%Nx_d;		// Forward
-	yf = (y + 3)%Ny_d;		// Forward
-	xb = (Nx_d + x - 4)%Nx_d;	// Backward
-	yb = (Ny_d + y - 4)%Ny_d; // Backward
+	xf = (x + 3)%Nx_d;			// Forward
+	yf = (y + 3)%Ny_d;			// Forward
+	xb = (Nx_d + x - 3)%Nx_d;	// Backward
+	yb = (Ny_d + y - 3)%Ny_d; 	// Backward
 
 	double ft13 = f1[gpu_fieldn_index(xb, y, 13)];
 	double ft14 = f1[gpu_fieldn_index(x, yb, 14)];
@@ -265,17 +275,16 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 	double ux = ux_i/rho;
 	double uy = uy_i/rho;
 
-	//if(save){
-		r[gpu_scalar_index(x, y)] = rho;
-		u[gpu_scalar_index(x, y)] = ux;
-		v[gpu_scalar_index(x, y)] = uy;
-	//}
+	r[gpu_scalar_index(x, y)] = rho;
+	u[gpu_scalar_index(x, y)] = ux;
+	v[gpu_scalar_index(x, y)] = uy;
 
 	double cs = 1.0/as_d;
 
 	double A = 1.0/(pow(cs, 2));
 	double B = 1.0/(2.0*pow(cs, 4));
 	double C = 1.0/(6.0*pow(cs, 6));
+
 	double D = 1.0/(pow(cs, 4));
 
 	double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
