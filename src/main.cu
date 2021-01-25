@@ -155,7 +155,7 @@ int main(int argc, char const *argv[]){
 		double *temp = f1_gpu;
 		f1_gpu = f2_gpu;
 		f2_gpu = temp;
-
+		
 		conv_error = compute_convergence(ux_gpu, ux_old_gpu, conv_gpu, conv_host);
 		report_flow_properties(n+1, conv_error, rho_gpu, ux_gpu, uy_gpu, prop_gpu, scalar_host, msg, computeFlowProperties);
 
