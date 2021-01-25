@@ -1,16 +1,16 @@
 domain:
-  Nx: 2048
-  Ny: 512
+  Nx: 512
+  Ny: 128
 
 simulation:
   lattice: D2V17
-  NSTEPS: 100000
-  NSAVE: 400
-  NMSG: 1000
+  NSTEPS: 1000
+  NSAVE: 50
+  NMSG: 10
   computeFlowProperties: true
   quiet: true
   meshprint: false
-  erro_max: 1e-7
+  erro_max: 1e-13
 
 gpu:
   nThreads: 32
