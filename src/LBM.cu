@@ -114,10 +114,10 @@ __device__ void gpu_bounce_back(unsigned int x, unsigned int y, double *f){
 		f[gpu_fieldn_index(x, y, 5)] = f[gpu_fieldn_index(x, y, 7)];
 		f[gpu_fieldn_index(x, y, 6)] = f[gpu_fieldn_index(x, y, 8)];
 
-		//f[gpu_fieldn_index(x, y, 9)] = f[gpu_fieldn_index(x+1, y+1, 11)];
-		//f[gpu_fieldn_index(x, y, 10)] = f[gpu_fieldn_index(x-1, y+1, 12)];
+		f[gpu_fieldn_index(x, y, 9)] = f[gpu_fieldn_index(x+1, y+1, 11)];
+		f[gpu_fieldn_index(x, y, 10)] = f[gpu_fieldn_index(x-1, y+1, 12)];
 
-		//f[gpu_fieldn_index(x, y, 14)] = f[gpu_fieldn_index(x, y+2, 16)];
+		f[gpu_fieldn_index(x, y, 14)] = f[gpu_fieldn_index(x, y+2, 16)];
 
 		f[gpu_fieldn_index(x+1, y+1, 9)] = f[gpu_fieldn_index(x, y, 11)];
 		f[gpu_fieldn_index(x-1, y+1, 10)] = f[gpu_fieldn_index(x, y, 12)];
@@ -130,10 +130,10 @@ __device__ void gpu_bounce_back(unsigned int x, unsigned int y, double *f){
 		f[gpu_fieldn_index(x, y, 7)] = f[gpu_fieldn_index(x, y, 5)];
 		f[gpu_fieldn_index(x, y, 8)] = f[gpu_fieldn_index(x, y, 6)];
 
-		//f[gpu_fieldn_index(x, y, 11)] = f[gpu_fieldn_index(x-1, y-1, 9)];
-		//f[gpu_fieldn_index(x, y, 12)] = f[gpu_fieldn_index(x+1, y-1, 10)];
+		f[gpu_fieldn_index(x, y, 11)] = f[gpu_fieldn_index(x-1, y-1, 9)];
+		f[gpu_fieldn_index(x, y, 12)] = f[gpu_fieldn_index(x+1, y-1, 10)];
 
-		//f[gpu_fieldn_index(x, y, 16)] = f[gpu_fieldn_index(x, y-2, 14)];
+		f[gpu_fieldn_index(x, y, 16)] = f[gpu_fieldn_index(x, y-2, 14)];
 
 		f[gpu_fieldn_index(x-1, y-1, 11)] = f[gpu_fieldn_index(x, y, 9)];
 		f[gpu_fieldn_index(x+1, y-1, 12)] = f[gpu_fieldn_index(x, y, 10)];
@@ -184,7 +184,7 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 	unsigned int y = blockIdx.y;
 	unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
 
-	const double force_x = 1e-15;
+	const double force_x = 0.0;
 	const double force_y = 0.0;
 
 	double rho = 0, ux_i = 0, uy_i = 0, tau_xx = 0, tau_xy = 0, tau_yy = 0;
@@ -204,7 +204,20 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 	r[gpu_scalar_index(x, y)] = rho;
 	u[gpu_scalar_index(x, y)] = ux;
 	v[gpu_scalar_index(x, y)] = uy;
-
+/*
+	if(x == 0){
+		if(y == 0){
+			printf("rho: %g ux: %g uy: %g\n", rho, ux, uy);
+			printf("f1\n");
+			printf("f0: %g f1: %g f2: %g\n", f1[gpu_fieldn_index(x, y, 0)], f1[gpu_fieldn_index(x, y, 1)], f1[gpu_fieldn_index(x, y, 2)]);
+			printf("f3: %g f4: %g f5: %g\n", f1[gpu_fieldn_index(x, y, 3)], f1[gpu_fieldn_index(x, y, 4)], f1[gpu_fieldn_index(x, y, 5)]);
+			printf("f6: %g f7: %g f8: %g\n", f1[gpu_fieldn_index(x, y, 6)], f1[gpu_fieldn_index(x, y, 7)], f1[gpu_fieldn_index(x, y, 8)]);
+			printf("f9: %g f10: %g f11: %g\n", f1[gpu_fieldn_index(x, y, 9)], f1[gpu_fieldn_index(x, y, 10)], f1[gpu_fieldn_index(x, y, 11)]);
+			printf("f12: %g f13: %g f14: %g\n", f1[gpu_fieldn_index(x, y, 12)], f1[gpu_fieldn_index(x, y, 13)], f1[gpu_fieldn_index(x, y, 14)]);
+			printf("f15: %g f16: %g \n", f1[gpu_fieldn_index(x, y, 15)], f1[gpu_fieldn_index(x, y, 16)]);
+		}
+	}
+*/
 	double cs = 1.0/as_d;
 
 	double A = 1.0/(pow(cs, 2));
@@ -264,16 +277,36 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 		x_att = (x + ex_d[n] + Nx_d)%Nx_d;
 		y_att = (y + ey_d[n] + Ny_d)%Ny_d;
 
+		if(x == 30){
+			if(y == 1){
+				//printf("n: %d x: %d y: %d\n", n, x_att, y_att);
+			}
+		}
+
 		f2[gpu_fieldn_index(x_att, y_att, n)] = f1[gpu_fieldn_index(x, y, n)];
 	}
-
+/*
+	if(x == 0){
+		if(y == 0){
+			printf("rho: %g ux: %g uy: %g\n", rho, ux, uy);
+			printf("f2\n");
+			printf("f0: %g f1: %g f2: %g\n", f2[gpu_fieldn_index(x, y, 0)], f2[gpu_fieldn_index(x, y, 1)], f2[gpu_fieldn_index(x, y, 2)]);
+			printf("f3: %g f4: %g f5: %g\n", f2[gpu_fieldn_index(x, y, 3)], f2[gpu_fieldn_index(x, y, 4)], f2[gpu_fieldn_index(x, y, 5)]);
+			printf("f6: %g f7: %g f8: %g\n", f2[gpu_fieldn_index(x, y, 6)], f2[gpu_fieldn_index(x, y, 7)], f2[gpu_fieldn_index(x, y, 8)]);
+			printf("f9: %g f10: %g f11: %g\n", f2[gpu_fieldn_index(x, y, 9)], f2[gpu_fieldn_index(x, y, 10)], f2[gpu_fieldn_index(x, y, 11)]);
+			printf("f12: %g f13: %g f14: %g\n", f2[gpu_fieldn_index(x, y, 12)], f2[gpu_fieldn_index(x, y, 13)], f2[gpu_fieldn_index(x, y, 14)]);
+			printf("f15: %g f16: %g \n", f2[gpu_fieldn_index(x, y, 15)], f2[gpu_fieldn_index(x, y, 16)]);
+		}
+	}
+*/
 	bool node_walls = walls_d[gpu_scalar_index(x, y)];
 
 	// Applying Boundary Conditions
-	if(node_walls){
-		gpu_bounce_back(x, y, f2);
+	if(x != 0){
+		if(node_walls){
+			gpu_bounce_back(x, y, f2);
+		}
 	}
-
 }
 
 __host__ double compute_convergence(double *u, double *u_old, double *conv_gpu, double *conv_host){

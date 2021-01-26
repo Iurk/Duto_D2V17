@@ -130,7 +130,7 @@ int main(int argc, char const *argv[]){
 		bool save = (n+1)%NSAVE == 0;
 		bool msg = (n+1)%NMSG == 0;
 		bool need_scalars = save || (msg && computeFlowProperties);
-/*
+
 		double *ux_test;
 
 		ux_test = (double*)malloc(mem_size_scalar);
@@ -143,7 +143,7 @@ int main(int argc, char const *argv[]){
 			}
 			std::cout << std::endl;
 		}
-*/
+		
 		stream_collide_save(f1_gpu, f2_gpu, f1rec_gpu, F_gpu, rho_gpu, ux_gpu, uy_gpu, need_scalars);
 
 		if(save){
