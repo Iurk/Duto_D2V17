@@ -17,7 +17,7 @@ from time import time
 def plotting(args):
     idx_file, rho, ux, y = args
     
-    fg.grafico(ux[:,256], y, idx_file, pasta_img)
+    fg.grafico(ux[:,16], y, idx_file, pasta_img)
     
 if __name__ == '__main__':
 
@@ -87,7 +87,7 @@ if __name__ == '__main__':
         idx = []
         
     print('Animating...')
-    fg.animation('Velocidade', './', pasta_img)
+    # fg.animation('Velocidade', './', pasta_img)
     print('Done!')
     fim = time()
     print("Finish in {} s".format(fim - ini))
