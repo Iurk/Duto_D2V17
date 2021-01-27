@@ -84,8 +84,8 @@ clean:
 	@rm -f -r $(RESULTS)/*
 	@rm -f -r $(MESH)/*
 	@rm -f $(EXE)
-	@rm -f *.gif
-	@rm -f *.mp4
+	@rm -f $(BINDIR)/*.gif
+	@rm -f $(BINDIR)/*.mp4
 	@echo Done!
 
 mesh:
@@ -101,6 +101,8 @@ refresh:
 	@rm -f -r $(VELOCITY)/*
 	@echo Cleaning up the results...
 	@rm -f -r $(RESULTS)/*
+	@rm -f $(BINDIR)/*.gif
+	@rm -f $(BINDIR)/*.mp4
 	@echo Cleaning up the mesh...
 	@rm -f -r $(MESH)/*
 	@echo Done!
