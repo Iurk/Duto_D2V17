@@ -184,7 +184,7 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 	unsigned int y = blockIdx.y;
 	unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
 
-	const double force_x = 1e-10;
+	const double force_x = 5e-9;
 	const double force_y = 0.0;
 
 	unsigned int xf, yf, xb, yb;
@@ -265,15 +265,15 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 
 	for(int n = 0; n < q; ++n){
 		rho += f[n];
-		ux_i += (f[n]*ex_d[n] + F[gpu_fieldn_index(x, y, n)]*ex_d[n]/2);
-		uy_i += (f[n]*ey_d[n] + F[gpu_fieldn_index(x, y, n)]*ey_d[n]/2);
+		ux_i += (f[n]*ex_d[n]);// + F[gpu_fieldn_index(x, y, n)]*ex_d[n]/2);
+		uy_i += (f[n]*ey_d[n]);// + F[gpu_fieldn_index(x, y, n)]*ey_d[n]/2);
 		tau_xx += f[n]*ex_d[n]*ex_d[n];
 		tau_xy += f[n]*ex_d[n]*ey_d[n];
 		tau_yy += f[n]*ey_d[n]*ey_d[n];
 	}
 
-	double ux = ux_i/rho;
-	double uy = uy_i/rho;
+	double ux = ux_i/rho + force_x/(2*rho);
+	double uy = uy_i/rho + force_y/(2*rho);
 
 	r[gpu_scalar_index(x, y)] = rho;
 	u[gpu_scalar_index(x, y)] = ux;
