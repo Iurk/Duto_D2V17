@@ -184,7 +184,7 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 	unsigned int y = blockIdx.y;
 	unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
 
-	const double force_x = 5e-9;
+	const double force_x = 5e-3;
 	const double force_y = 0.0;
 
 	unsigned int xf, yf, xb, yb;
@@ -207,7 +207,7 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *f1rec, d
 	double ft7 = f1[gpu_fieldn_index(xf, yf, 7)];
 	double ft8 = f1[gpu_fieldn_index(xb, yf, 8)];
 /*
-	if(x == 1){
+	if(x == 1){ 
 		if(y == 1){
 			printf("1 -> x: %d y: %d\n", xb, y);
 			printf("2 -> x: %d y: %d\n", x, yb);
