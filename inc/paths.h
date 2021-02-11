@@ -3,6 +3,7 @@
 
 #include <string>
 
+const std::string bin_folder = "./bin/";
 const std::string folder = "./bin/Results/";
 const std::string walls_mesh = "./bin/Mesh/walls.bin";
 const std::string inlet_mesh = "./bin/Mesh/inlet.bin";
