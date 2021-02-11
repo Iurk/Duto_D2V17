@@ -61,7 +61,7 @@ if __name__ == '__main__':
                 path_full = path + "/%s" % file
                 dic[var].append(path_full)
                 
-    x = np.arange(1, Nx+1, 1)
+    # x = np.arange(1, Nx+1, 1)
     
     CPU = mp.cpu_count()
     pool = mp.Pool()
@@ -90,6 +90,7 @@ if __name__ == '__main__':
         
         image_inputs = zip(idx, rhos, uxs, uys)
         perfil_inputs = zip(idx, uxs, ys)
+        
         pool.map(plotting_image, image_inputs)
         pool.map(plotting_perfil, perfil_inputs)
         idx = []
