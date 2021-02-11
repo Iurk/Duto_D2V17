@@ -22,8 +22,10 @@ walls = np.zeros((Ny, Nx), dtype=bool)
 inlet = np.zeros_like(walls)
 outlet = np.zeros_like(walls)
 
-walls[0,:] = True
-walls[Ny-1,:] = True
+walls[0:3,:] = True
+
+start = Ny-3
+walls[start:Ny, :] = True
 
 inlet[:, 0:3] = True
 # inlet[:, 0] = True
