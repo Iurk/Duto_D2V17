@@ -48,14 +48,15 @@ int main(int argc, char const *argv[]){
 	printf("\n");
 
 	// Declaration and Allocation in device Memory
-	double *f1_gpu, *f2_gpu, *f1rec_gpu, *F_gpu;
+	double *f1_gpu, *f2_gpu, *feq_gpu, *frec_gpu, *S_gpu;
 	double *rho_gpu, *ux_gpu, *uy_gpu, *ux_old_gpu;
 	double *prop_gpu, *conv_gpu;
 
 	checkCudaErrors(cudaMalloc((void**)&f1_gpu, mem_size_ndir));
 	checkCudaErrors(cudaMalloc((void**)&f2_gpu, mem_size_ndir));
-	checkCudaErrors(cudaMalloc((void**)&f1rec_gpu, mem_size_ndir));
-	checkCudaErrors(cudaMalloc((void**)&F_gpu, mem_size_ndir));
+	checkCudaErrors(cudaMalloc((void**)&feq_gpu, mem_size_ndir));
+	checkCudaErrors(cudaMalloc((void**)&frec_gpu, mem_size_ndir));
+	checkCudaErrors(cudaMalloc((void**)&S_gpu, mem_size_ndir));
 	checkCudaErrors(cudaMalloc((void**)&rho_gpu, mem_size_scalar));
 	checkCudaErrors(cudaMalloc((void**)&ux_gpu, mem_size_scalar));
 	checkCudaErrors(cudaMalloc((void**)&uy_gpu, mem_size_scalar));
@@ -111,7 +112,9 @@ int main(int argc, char const *argv[]){
 	initialization(ux_old_gpu, 0.0);
 
 	init_equilibrium(f1_gpu, rho_gpu, ux_gpu, uy_gpu);
-	checkCudaErrors(cudaMemset(f1rec_gpu, 0, mem_size_ndir));
+	checkCudaErrors(cudaMemset(feq_gpu, 0, mem_size_ndir));
+	checkCudaErrors(cudaMemset(frec_gpu, 0, mem_size_ndir));
+	//checkCudaErrors(cudaMemset(S_gpu, 0, mem_size_ndir));
 
 	save_scalar("rho",rho_gpu, scalar_host, 0);
 	save_scalar("ux", ux_gpu, scalar_host, 0);
@@ -122,10 +125,12 @@ int main(int argc, char const *argv[]){
 	checkCudaErrors(cudaEventRecord(start, 0));
 
 	double conv_error;
+	unsigned int end_step;
+	std::vector<double> fluid_prop;
 
 	// Main Loop
 	printf("Starting main loop...\n");
-	std::cout << std::setw(10) << "Timestep" << std::setw(10) << "E" << std::setw(10) << "L2" << std::setw(20) << "Convergence" << std::endl;
+	std::cout << std::setw(10) << "Timestep" << std::setw(10) << "E" << std::setw(15) << "L2" << std::setw(23) << "Convergence" << std::endl;
 	for(unsigned int n = 0; n < NSTEPS; ++n){
 		bool save = (n+1)%NSAVE == 0;
 		bool msg = (n+1)%NMSG == 0;
@@ -144,7 +149,7 @@ int main(int argc, char const *argv[]){
 			std::cout << std::endl;
 		}
 */
-		stream_collide_save(f1_gpu, f2_gpu, f1rec_gpu, F_gpu, rho_gpu, ux_gpu, uy_gpu, need_scalars);
+		stream_collide_save(f1_gpu, f2_gpu, feq_gpu, frec_gpu, S_gpu, rho_gpu, ux_gpu, uy_gpu, need_scalars);
 
 		if(save){
 			save_scalar("rho",rho_gpu, scalar_host, n+1);
@@ -157,16 +162,20 @@ int main(int argc, char const *argv[]){
 		f2_gpu = temp;
 		
 		conv_error = compute_convergence(ux_gpu, ux_old_gpu, conv_gpu, conv_host);
-		report_flow_properties(n+1, conv_error, rho_gpu, ux_gpu, uy_gpu, prop_gpu, scalar_host, msg, computeFlowProperties);
+		fluid_prop = report_flow_properties(n+1, conv_error, rho_gpu, ux_gpu, uy_gpu, prop_gpu, scalar_host, msg, computeFlowProperties);
 
+		end_step = n+1;
 		if(conv_error < erro_max){
-			msg = 0 == 0;
-			report_flow_properties(n+1, conv_error, rho_gpu, ux_gpu, uy_gpu, prop_gpu, scalar_host, msg, computeFlowProperties);
 			break;
 		}
 
 		checkCudaErrors(cudaMemcpy(ux_old_gpu, ux_gpu, mem_size_scalar, cudaMemcpyDeviceToDevice));
 	}
+
+	bool msg = 0 == 0;
+	std::cout << std::setw(10) << "Timestep" << std::setw(10) << "E" << std::setw(15) << "L2" << std::setw(23) << "Convergence" << std::endl;
+	fluid_prop = report_flow_properties(end_step, conv_error, rho_gpu, ux_gpu, uy_gpu, prop_gpu, scalar_host, msg, computeFlowProperties);
+	save_terminal(end_step, conv_error, fluid_prop);
 
 	// Measuring time
 	checkCudaErrors(cudaEventRecord(stop, 0));
@@ -208,8 +217,9 @@ int main(int argc, char const *argv[]){
 	// LBM variables
 	checkCudaErrors(cudaFree(f1_gpu));
 	checkCudaErrors(cudaFree(f2_gpu));
-	checkCudaErrors(cudaFree(f1rec_gpu));
-	checkCudaErrors(cudaFree(F_gpu));
+	checkCudaErrors(cudaFree(feq_gpu));
+	checkCudaErrors(cudaFree(frec_gpu));
+	checkCudaErrors(cudaFree(S_gpu));
 	checkCudaErrors(cudaFree(rho_gpu));
 	checkCudaErrors(cudaFree(ux_gpu));
 	checkCudaErrors(cudaFree(uy_gpu));
