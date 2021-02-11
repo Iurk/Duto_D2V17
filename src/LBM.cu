@@ -256,9 +256,11 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 	double ux = (ux_i + 0.5*rho*gx)/rho;
 	double uy = (uy_i + 0.5*rho*gy)/rho;
 
-	double tauxx = Pxx - rho*ux*ux;
+	double  cs = 1.0/as_d;
+
+	double tauxx = Pxx - rho*(ux*ux + pow(cs, 2));
 	double tauxy = Pxy - rho*ux*uy;
-	double tauyy = Pyy - rho*uy*uy;
+	double tauyy = Pyy - rho*(uy*uy + pow(cs, 2));
 
 	r[gpu_scalar_index(x, y)] = rho;
 	u[gpu_scalar_index(x, y)] = ux;
