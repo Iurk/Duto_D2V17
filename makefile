@@ -45,16 +45,28 @@ OBJ := $(C_OBJ) $(CPP_OBJ) $(CU_OBJ)
 DEP := $(C_DEP) $(CPP_DEP) $(CU_DEP)
 
 # Flags
-INCDIRS = $(addprefix -I, $(INCDIR))
-LIBDIRS = $(addprefix -L, $(LIBDIR))
-LIB := $(addprefix -l, $(LIBRARY))
-CXXFLAGS := -std=c++11
-NVCCARCHFLAG := -arch $(ARCH)
-NVCCFLAGS := -v --ptxas-options=-v -O3 --device-c # Para debug flag -g -G e executar com cuda-memcheck ./lbm |more
+NVCCARCHFLAG := -arch sm_61
+NVCCFLAGS := -std=c++11 -v --ptxas-options=-v -O3 --device-c # Para debug flag -g -G e executar com cuda-memcheck ./lbm |more
+LDFLAGS := $(addprefix -L, $(LIBDIR))
 DEPFLAGS := -MMD
 
-COMPILE.c = $(NVCC) $(DEPFLAGS) -g $(INCDIRS) -c
-COMPILE.cpp = $(NVCC) $(DEPFLAGS) $(CXXFLAGS) $(INCDIRS) $(NVCCARCHFLAG) $(NVCCFLAGS)
+INCLUDES := $(addprefix -I, $(INCDIR))
+LIBRARIES := $(addprefix -l, $(LIBRARY))
+
+ALL_CPFLAGS := $(DEPFLAGS)
+ALL_CPFLAGS += $(NVCCARCHFLAG)
+ALL_CPFLAGS += $(NVCCFLAGS)
+
+ALL_LDFLAGS := $(LDFLAGS)
+
+CXXFLAGS := -std=c++11
+NVCCARCHFLAG := -arch $(ARCH)
+NVCCFLAGS := -v --ptxas-options=-v -O3 # Para debug flag -g -G e executar com cuda-memcheck ./lbm |more
+
+
+COMPILE.c = $(NVCC) $(DEPFLAGS) -g $(INCLUDES) -c
+COMPILE.cpp = $(NVCC) $(ALL_CPFLAGS) $(INCLUDES) --device-c
+COMPILE.cu = $(NVCC) $(ALL_CPFLAGS) $(INCLUDES) --device-c
 
 .PHONY: all clean mesh plot refresh run
 
@@ -62,7 +74,7 @@ all: $(EXE)
 
 # Linkage
 $(EXE): $(OBJ)
-	$(NVCC) $(NVCCARCHFLAG) $(CXXFLAGS) $(LIBDIRS) $^ -o $@ $(LIB)
+	$(NVCC) $(NVCCARCHFLAG) $(INCLUDES) $(ALL_LDFLAGS) $^ -o $@ $(LIBRARIES)
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
 	$(COMPILE.c) $< -o $@
@@ -71,7 +83,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp | $(OBJDIR)
 	$(COMPILE.cpp) $< -o $@
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.cu | $(OBJDIR)
-	$(COMPILE.cpp) $< -o $@
+	$(COMPILE.cu) $< -o $@
 
 $(OBJDIR):
 	@mkdir -p $@
