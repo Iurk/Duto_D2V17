@@ -63,7 +63,7 @@ int main(int argc, char const *argv[]){
 	checkCudaErrors(cudaMalloc((void**)&uy_gpu, mem_size_scalar));
 	checkCudaErrors(cudaMalloc((void**)&ux_old_gpu, mem_size_scalar));
 
-	const size_t mem_size_conv = 2*Nx/nThreads*Ny*sizeof(double);
+	const size_t mem_size_conv = 2*1*Ny/nThreads*sizeof(double);
 	const size_t mem_size_props = 3*Nx/nThreads*Ny*sizeof(double);
 	checkCudaErrors(cudaMalloc((void**)&prop_gpu, mem_size_props));
 	checkCudaErrors(cudaMalloc((void**)&conv_gpu, mem_size_conv));
@@ -131,11 +131,11 @@ int main(int argc, char const *argv[]){
 
 	// Main Loop
 	printf("Starting main loop...\n");
-	std::cout << std::setw(10) << "Timestep" << std::setw(10) << "E" << std::setw(15) << "L2" << std::setw(23) << "Convergence" << std::endl;
+	std::cout << std::setw(10) << "Timestep" << std::setw(20) << "Convergence" << std::endl;
 	for(unsigned int n = 0; n < NSTEPS; ++n){
 		bool save = (n+1)%NSAVE == 0;
 		bool msg = (n+1)%NMSG == 0;
-		bool need_scalars = save || (msg && computeFlowProperties);
+		bool need_scalars = save || (msg);
 /*
 		double *ux_test;
 
@@ -162,8 +162,7 @@ int main(int argc, char const *argv[]){
 		f1_gpu = f2_gpu;
 		f2_gpu = temp;
 		
-		conv_error = compute_convergence(ux_gpu, ux_old_gpu, conv_gpu, conv_host);
-		fluid_prop = report_flow_properties(n+1, conv_error, rho_gpu, ux_gpu, uy_gpu, prop_gpu, scalar_host, msg, computeFlowProperties);
+		conv_error = report_convergence(n+1, ux_gpu, ux_old_gpu, conv_host, conv_gpu, msg);
 
 		end_step = n+1;
 		if(conv_error < erro_max){
@@ -175,7 +174,7 @@ int main(int argc, char const *argv[]){
 
 	bool msg = 0 == 0;
 	std::cout << std::setw(10) << "Timestep" << std::setw(10) << "E" << std::setw(15) << "L2" << std::setw(23) << "Convergence" << std::endl;
-	fluid_prop = report_flow_properties(end_step, conv_error, rho_gpu, ux_gpu, uy_gpu, prop_gpu, scalar_host, msg, computeFlowProperties);
+	fluid_prop = report_flow_properties(end_step, conv_error, rho_gpu, ux_gpu, uy_gpu, prop_gpu, scalar_host, msg);
 	save_terminal(end_step, conv_error, fluid_prop);
 
 	// Measuring time
