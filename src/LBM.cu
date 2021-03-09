@@ -234,19 +234,30 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 
 }
 
-__host__ double compute_convergence(double *u, double *u_old, double *conv_gpu, double *conv_host){
+__host__ double report_convergence(unsigned int t, double *u, double *u_old, double *conv_host, double *conv_gpu, bool msg){
 
-	dim3 grid(Nx/nThreads, Ny, 1);
-	dim3 block(nThreads, 1, 1);
+	double conv;
+	conv = compute_convergence(u, u_old, conv_host, conv_gpu);
 
-	gpu_compute_convergence<<< grid, block, 2*block.x*sizeof(double) >>>(u, u_old, conv_gpu);
+	if(msg){
+		std::cout << std::setw(10) << t << std::setw(20) << conv << std::endl;
+	}
+
+	return conv;
+}
+
+__host__ double compute_convergence(double *u, double *u_old, double *conv_host, double *conv_gpu){
+
+	dim3 grid(1, Ny/nThreads, 1);
+	dim3 block(1, nThreads, 1);
+
+	gpu_compute_convergence<<< grid, block, 2*block.y*sizeof(double) >>>(u, u_old, conv_gpu);
 	getLastCudaError("gpu_compute_convergence kernel error");
 
 	size_t conv_size_bytes = 2*grid.x*grid.y*sizeof(double);
 	checkCudaErrors(cudaMemcpy(conv_host, conv_gpu, conv_size_bytes, cudaMemcpyDeviceToHost));
 
-	double conv_error = 0.0;
-
+	double convergence;
 	double sumuxe2 = 0.0;
 	double sumuxa2 = 0.0;
 
@@ -256,29 +267,29 @@ __host__ double compute_convergence(double *u, double *u_old, double *conv_gpu, 
 		sumuxa2 += conv_host[2*i+1];
 	}
 
-	conv_error = sqrt(sumuxe2/sumuxa2);
-	return conv_error;
+	convergence = sqrt(sumuxe2/sumuxa2);
+	return convergence;
 }
 
 __global__ void gpu_compute_convergence(double *u, double *u_old, double *conv){
 
-	unsigned int y = blockIdx.y;
-	unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
+	unsigned int y = blockIdx.y*blockDim.y + threadIdx.y;
+	unsigned int x = Nx_d/2;
 
 	extern __shared__ double data[];
 
 	double *uxe2 = data;
-	double *uxa2 = data + 1*blockDim.x;
+	double *uxa2 = data + 1*blockDim.y;
 
 	double ux = u[gpu_scalar_index(x, y)];
 	double ux_old = u_old[gpu_scalar_index(x, y)];
 
-	uxe2[threadIdx.x] = (ux - ux_old)*(ux - ux_old);
-	uxa2[threadIdx.x] = ux_old*ux_old;
+	uxe2[threadIdx.y] = (ux - ux_old)*(ux - ux_old);
+	uxa2[threadIdx.y] = ux_old*ux_old;
 
 	__syncthreads();
 
-	if(threadIdx.x == 0){
+	if(threadIdx.y == 0){
 
 		size_t idx = 2*(gridDim.x*blockIdx.y + blockIdx.x);
 
@@ -293,20 +304,13 @@ __global__ void gpu_compute_convergence(double *u, double *u_old, double *conv){
 	}
 }
 
-__host__ std::vector<double> report_flow_properties(unsigned int t, double conv, double *rho, double *ux, double *uy,
-									 double *prop_gpu, double *prop_host, bool msg, bool computeFlowProperties){
+__host__ std::vector<double> report_flow_properties(unsigned int t, double conv, double *rho, double *ux, double *uy, double *prop_gpu, double *prop_host, bool msg){
 
 	std::vector<double> prop;
 
 	if(msg){
-		if(computeFlowProperties){
-			prop = compute_flow_properties(t, rho, ux, uy, prop, prop_gpu, prop_host);
-			std::cout << std::setw(10) << t << std::setw(13) << prop[0] << std::setw(15) << prop[1] << std::setw(20) << conv << std::endl;
-		}
-
-		if(!quiet){
-			printf("Completed timestep %d\n", t);
-		}
+		prop = compute_flow_properties(t, rho, ux, uy, prop, prop_gpu, prop_host);
+		std::cout << std::setw(10) << t << std::setw(13) << prop[0] << std::setw(15) << prop[1] << std::setw(20) << conv << std::endl;
 	}
 
 	return prop;
