@@ -29,8 +29,6 @@ namespace myGlobals{
 	unsigned int NSTEPS = simulation["NSTEPS"].as<unsigned int>();
 	unsigned int NSAVE = simulation["NSAVE"].as<unsigned int>();
 	unsigned int NMSG = simulation["NMSG"].as<unsigned int>();
-	bool computeFlowProperties = simulation["computeFlowProperties"].as<bool>();
-	bool quiet = simulation["quiet"].as<bool>();
 	bool meshprint = simulation["meshprint"].as<bool>();
 	double erro_max = simulation["erro_max"].as<double>();
 
