@@ -69,7 +69,7 @@ namespace myGlobals{
 	const size_t mem_size_scalar = sizeof(double)*Nx*Ny;
 
 	// Nu and Tau
-	double nu = (u_max*Nx)/Re;
+	double nu = (u_max*Ny)/Re;
 	const double tau = nu*(as*as) + 0.5;
 
 	bool *walls = read_bin(walls_mesh);
