@@ -14,9 +14,13 @@ gpu:
   nThreads: 32
 
 input:
-  Re: 100
-  u_max: 0.04
+  Re: 150
+  u_max: 0.07
   rho0: 1.0
+
+output:
+  plot_module: true
+  plot_profiles: false
 
 air:
   rho: 1.21
