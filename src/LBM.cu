@@ -74,13 +74,13 @@ __device__ void hermite_moments(double rho, double ux, double uy, double tauxx, 
 	a[0] = rho;											// 0
 	a[1] = rho*ux;										// 1 - x
 	a[2] = rho*uy;										// 1 - y
-	a[3] = rho*ux2 + tauxx;						// 2 - xx
+	a[3] = rho*ux2 + tauxx;								// 2 - xx
 	a[4] = rho*ux*uy + tauxy;							// 2 - xy
-	a[5] = rho*uy2 + tauyy;						// 2 - yy
-	a[6] = rho*ux3 + 3*ux*tauxx;					// 3 - xxx
-	a[7] = rho*ux2*uy + 2*ux*tauxy + uy*tauxx;	// 3 - yxx
-	a[8] = rho*ux*uy2 + 2*uy*tauxy + ux*tauyy;	// 3 - xyy
-	a[9] = rho*uy3 + 3*uy*tauyy;					// 3 - yyy
+	a[5] = rho*uy2 + tauyy;								// 2 - yy
+	a[6] = rho*ux3 + 3*ux*tauxx;						// 3 - xxx
+	a[7] = rho*ux2*uy + 2*ux*tauxy + uy*tauxx;			// 3 - yxx
+	a[8] = rho*ux*uy2 + 2*uy*tauxy + ux*tauyy;			// 3 - xyy
+	a[9] = rho*uy3 + 3*uy*tauyy;						// 3 - yyy
 }
 
 // Equilibrium Distribuition
