@@ -5,6 +5,8 @@
 
 extern __constant__ unsigned int q, Nx_d, Ny_d;
 
+extern __device__ bool *walls_d;
+
 void initialization(double*, double);
 void init_equilibrium(double*, double*, double*, double*);
 void stream_collide_save(double*, double*, double*, double*, double*, double*, double*, double*, bool);
