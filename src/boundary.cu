@@ -77,3 +77,36 @@ __global__ void gpu_bounce_back(double *f){
 		device_bounce_back(x, y, f);
 	}
 }
+
+__host__ void inlet_BC(double u_def, double *f, double *r, double *u, double *v){
+
+	dim3 grid(Nx/nThreads, Ny, 1);
+	dim3 block(nThreads, 1, 1);
+
+	gpu_inlet<<< grid, block >>>(u_def, f, r, u, v);
+	getLastCudaError("gpu_inlet kernel error");
+}
+
+__global__ void gpu_inlet(double udef, double *f, double *r, double *u, double *v){
+
+	unsigned int y = blockIdx.y;
+	unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
+
+	if(x == 0){
+
+		unsigned int I[11] = {0, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16};
+
+		double rhoI = 0.0, rhoaxy = 0.0;
+		for(int n = 0; n < q; ++n){
+			unsigned int ni = I[n];
+			rhoI += f[gpu_fieldn_index(x, y, ni)];
+			rhoaxy += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni]*ey_d[ni];
+		}
+
+		double udef2 = u_def*u_def;
+		double udef3 = u_def*u_def*u_def;
+
+		double rho = (129600*rhoI)/((5*sqrt(193)+5525)*udef3 + (-31380-1740*sqrt(193))*udef2 + (-54144-720*sqrt(193))*udef + (808*sqrt(193)+94712));
+		double tauxy = (-270*rhoaxy)/((4*sqrt(193)+190)*udef - 135);
+	}
+}
