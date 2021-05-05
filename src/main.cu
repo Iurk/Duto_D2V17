@@ -156,7 +156,7 @@ int main(int argc, char const *argv[]){
 		}
 */
 		stream_collide_save(f1_gpu, f2_gpu, feq_gpu, frec_gpu, S_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, need_scalars);
-		outlet_BC(f2_gpu);
+		outlet_BC(0.9, f2_gpu);
 		bounce_back(f2_gpu);
 
 		if(save){
