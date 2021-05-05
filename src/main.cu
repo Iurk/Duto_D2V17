@@ -52,6 +52,7 @@ int main(int argc, char const *argv[]){
 	// Declaration and Allocation in device Memory
 	double *f1_gpu, *f2_gpu, *feq_gpu, *frec_gpu, *S_gpu;
 	double *rho_gpu, *ux_gpu, *uy_gpu, *ux_old_gpu;
+	double *txx_gpu, *txy_gpu, *tyy_gpu;
 	double *prop_gpu, *conv_gpu;
 
 	checkCudaErrors(cudaMalloc((void**)&f1_gpu, mem_size_ndir));
@@ -63,6 +64,9 @@ int main(int argc, char const *argv[]){
 	checkCudaErrors(cudaMalloc((void**)&ux_gpu, mem_size_scalar));
 	checkCudaErrors(cudaMalloc((void**)&uy_gpu, mem_size_scalar));
 	checkCudaErrors(cudaMalloc((void**)&ux_old_gpu, mem_size_scalar));
+	checkCudaErrors(cudaMalloc((void**)&txx_gpu, mem_size_scalar));
+	checkCudaErrors(cudaMalloc((void**)&txy_gpu, mem_size_scalar));
+	checkCudaErrors(cudaMalloc((void**)&tyy_gpu, mem_size_scalar));
 
 	const size_t mem_size_conv = 2*1*Ny/nThreads*sizeof(double);
 	const size_t mem_size_props = 3*Nx/nThreads*Ny*sizeof(double);
@@ -151,7 +155,8 @@ int main(int argc, char const *argv[]){
 			std::cout << std::endl;
 		}
 */
-		stream_collide_save(f1_gpu, f2_gpu, feq_gpu, frec_gpu, S_gpu, rho_gpu, ux_gpu, uy_gpu, need_scalars);
+		stream_collide_save(f1_gpu, f2_gpu, feq_gpu, frec_gpu, S_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, need_scalars);
+		outlet_BC(f2_gpu);
 		bounce_back(f2_gpu);
 
 		if(save){
@@ -167,7 +172,7 @@ int main(int argc, char const *argv[]){
 		conv_error = report_convergence(n+1, ux_gpu, ux_old_gpu, conv_host, conv_gpu, msg);
 
 		end_step = n+1;
-		if(conv_error < erro_max){
+		if(conv_error < erro_max && n > 2){
 			break;
 		}
 
@@ -226,6 +231,9 @@ int main(int argc, char const *argv[]){
 	checkCudaErrors(cudaFree(ux_gpu));
 	checkCudaErrors(cudaFree(uy_gpu));
 	checkCudaErrors(cudaFree(ux_old_gpu));
+	checkCudaErrors(cudaFree(txx_gpu));
+	checkCudaErrors(cudaFree(txy_gpu));
+	checkCudaErrors(cudaFree(tyy_gpu));
 	checkCudaErrors(cudaFree(prop_gpu));
 	checkCudaErrors(cudaFree(conv_gpu));
 	checkCudaErrors(cudaFree(ex_gpu));
