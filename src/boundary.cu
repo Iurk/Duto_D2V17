@@ -13,6 +13,7 @@ __device__ __forceinline__ size_t gpu_fieldn_index(unsigned int x, unsigned int 
 }
 
 __global__ void gpu_bounce_back(double*);
+__global__ void gpu_outlet(double*);
 
 // Boundary Conditions
 __device__ void device_bounce_back(unsigned int x, unsigned int y, double *f){
@@ -77,7 +78,7 @@ __global__ void gpu_bounce_back(double *f){
 		device_bounce_back(x, y, f);
 	}
 }
-
+/*
 __host__ void inlet_BC(double u_def, double *f, double *r, double *u, double *v){
 
 	dim3 grid(Nx/nThreads, Ny, 1);
@@ -108,5 +109,27 @@ __global__ void gpu_inlet(double udef, double *f, double *r, double *u, double *
 
 		double rho = (129600*rhoI)/((5*sqrt(193)+5525)*udef3 + (-31380-1740*sqrt(193))*udef2 + (-54144-720*sqrt(193))*udef + (808*sqrt(193)+94712));
 		double tauxy = (-270*rhoaxy)/((4*sqrt(193)+190)*udef - 135);
+	}
+}
+*/
+__host__ void outlet_BC(double *f){
+
+	dim3 grid(Nx/nThreads, Ny, 1);
+	dim3 block(nThreads, 1, 1);
+
+	gpu_outlet<<< grid, block >>>(f);
+	getLastCudaError("gpu_outlet kernel error");
+}
+
+__global__ void gpu_outlet(double *f){
+
+	unsigned int y = blockIdx.y;
+	unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
+
+	bool node_outlet = outlet_d[gpu_scalar_index(x, y)];
+	if(node_outlet){
+		for(int n = 0; n < q; ++n){
+			f[gpu_fieldn_index(x, y, n)] = f[gpu_fieldn_index(x-3, y, n)];
+		}
 	}
 }
