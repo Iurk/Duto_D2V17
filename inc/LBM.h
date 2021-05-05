@@ -5,11 +5,11 @@
 
 extern __constant__ unsigned int q, Nx_d, Ny_d;
 
-extern __device__ bool *walls_d;
+extern __device__ bool *walls_d, *inlet_d, *outlet_d;
 
 void initialization(double*, double);
 void init_equilibrium(double*, double*, double*, double*);
-void stream_collide_save(double*, double*, double*, double*, double*, double*, double*, double*, bool);
+void stream_collide_save(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, bool);
 double report_convergence(unsigned int, double* , double*, double*, double*, bool msg);
 double compute_convergence(double*, double*, double*, double*);
 std::vector<double> report_flow_properties(unsigned int, double, double*, double*, double*, double*, double*, bool);

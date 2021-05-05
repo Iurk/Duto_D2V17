@@ -34,7 +34,7 @@ __device__ __forceinline__ size_t gpu_fieldn_index(unsigned int x, unsigned int 
 }
 
 __global__ void gpu_init_equilibrium(double*, double*, double*, double*);
-__global__ void gpu_stream_collide_save(double*, double*, double*, double*, double*, double*, double*, double*, bool);
+__global__ void gpu_stream_collide_save(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, bool);
 __global__ void gpu_compute_convergence(double*, double*, double*);
 __global__ void gpu_compute_flow_properties(unsigned int, double*, double*, double*, double*);
 __global__ void gpu_print_mesh(int);
@@ -168,13 +168,16 @@ __device__ void gpu_source(unsigned int x, unsigned int y, double gx, double gy,
 }
 
 // Poiseulle Flow
-__device__ void poiseulle_eval(unsigned int x, unsigned int y, double *u){
+__device__ double poiseulle_eval(unsigned int x, unsigned int y, double *u){
 
-	double gradP = -8*u_max_d*mi_ar_d/(Ny_d*Ny_d - 2*Ny_d);
+	double y_double = (double) y;
+	double Ny_double = (double) Ny_d;
 
-	double ux = (-1/(2*mi_ar_d))*(gradP)*((Ny_d - 1)*y - y*y);
+	double gradP = (-1)*8*u_max_d*mi_ar_d/(Ny_double*Ny_double - 2*Ny_double);
 
-	*u = ux;
+	double ux = (1.0/(2.0*mi_ar_d))*(gradP)*(y_double*y_double - (Ny_double - 1)*y_double);
+
+	return ux;
 }
 
 __host__ void init_equilibrium(double *f1, double *r, double *u, double *v){
@@ -198,7 +201,7 @@ __global__ void gpu_init_equilibrium(double *f1, double *r, double *u, double *v
 	gpu_equilibrium(x, y, rho, ux, uy, f1);
 }
 
-__host__ void stream_collide_save(double *f1, double *f2, double *feq, double *frec, double *S, double *r, double *u, double *v, bool save){
+__host__ void stream_collide_save(double *f1, double *f2, double *feq, double *frec, double *S, double *r, double *u, double *v, double *txx, double *txy, double *tyy, bool save){
 
 	dim3 grid(Nx/nThreads, Ny, 1);
 	dim3 block(nThreads, 1, 1);
@@ -206,11 +209,11 @@ __host__ void stream_collide_save(double *f1, double *f2, double *feq, double *f
 	//dim3 grid(1,1,1);
 	//dim3 block(1,1,1);
 
-	gpu_stream_collide_save<<< grid, block >>>(f1, f2, feq, frec, S, r, u, v, save);
+	gpu_stream_collide_save<<< grid, block >>>(f1, f2, feq, frec, S, r, u, v, txx, txy, tyy, save);
 	getLastCudaError("gpu_stream_collide_save kernel error");
 }
 
-__global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, double *frec, double *S, double *r, double *u, double *v, bool save){
+__global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, double *frec, double *S, double *r, double *u, double *v, double *txx, double *txy, double *tyy, bool save){
 
 	const double omega = 1.0/tau_d;
 
@@ -219,7 +222,7 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 
 	unsigned int x_att, y_att;
 
-	const double gx = 1e-6;
+	const double gx = 0.0;
 	const double gy = 0.0;
 
 	double rho = 0, ux_i = 0, uy_i = 0, Pxx = 0, Pxy = 0, Pyy = 0;
@@ -245,7 +248,7 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 	u[gpu_scalar_index(x, y)] = ux;
 	v[gpu_scalar_index(x, y)] = uy;
 
-	gpu_source(x, y, gx, gy, rho, ux, uy, S);
+	//gpu_source(x, y, gx, gy, rho, ux, uy, S);
 	gpu_equilibrium(x, y, rho, ux, uy, feq);
 
 	double fneq;
@@ -260,12 +263,66 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 		tauxy += (fneq)*ex_d[n]*ey_d[n];
 		tauyy += (fneq)*ey_d[n]*ey_d[n];
 	}
+
+	txx[gpu_scalar_index(x, y)] = tauxx;
+	txy[gpu_scalar_index(x, y)] = tauxy;
+	tyy[gpu_scalar_index(x, y)] = tauyy;
 	
 	gpu_recursive(x, y, rho, ux, uy, tauxx, tauxy, tauyy, frec);
 
 	// Collision Step
 	for(int n = 0; n < q; ++n){
-		f2[gpu_fieldn_index(x, y, n)] = omega*feq[gpu_fieldn_index(x, y, n)] + (1 - omega)*frec[gpu_fieldn_index(x, y, n)] + (1 - 0.5*omega)*S[gpu_fieldn_index(x, y, n)];
+		f2[gpu_fieldn_index(x, y, n)] = omega*feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*frec[gpu_fieldn_index(x, y, n)];// + (1 - 0.5*omega)*S[gpu_fieldn_index(x, y, n)];
+	}
+
+	// Applying Inlet BC with prescribed velocity
+	if(x == 0){
+		double ux_in = u_max_d;
+		double uy_in = 0.0;
+
+		unsigned int NI = 11;
+		unsigned int I[11] = {0, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16};
+
+		double rhoI = 0.0, rhoaxy = 0.0;
+		for(int n = 0; n < NI; ++n){
+			unsigned int ni = I[n];
+			rhoI += f2[gpu_fieldn_index(x, y, ni)];
+			rhoaxy += f2[gpu_fieldn_index(x, y, ni)]*ex_d[ni]*ey_d[ni];
+		}
+
+		double ux_in2 = ux_in*ux_in;
+		double ux_in3 = ux_in*ux_in*ux_in;
+
+		double rho = (129600*rhoI)/((5*sqrt(193.0)+5525)*ux_in3 + (-31380-1740*sqrt(193.0))*ux_in2 + (-54144-720.0*sqrt(193.0))*ux_in + (808*sqrt(193.0)+94712));
+		double tauxy = (-270*rhoaxy)/((4*sqrt(193.0)+190)*ux_in - 135);
+
+		r[gpu_scalar_index(x, y)] = rho;
+		u[gpu_scalar_index(x, y)] = ux_in;
+		v[gpu_scalar_index(x, y)] = uy_in;
+		txy[gpu_scalar_index(x, y)] = tauxy;
+
+		gpu_recursive(x, y, rho, ux, uy, tauxx, tauxy, tauyy, frec);
+
+		for(int n = 0; n < q; ++n){
+			f2[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
+		}
+	}
+
+	__syncthreads();
+
+	if(x == 1){
+		f2[gpu_fieldn_index(x, y, 9)] = f2[gpu_fieldn_index(x, y, 11)] - feq[gpu_fieldn_index(x, y, 11)] + feq[gpu_fieldn_index(x, y, 9)];
+		f2[gpu_fieldn_index(x, y, 12)] = f2[gpu_fieldn_index(x, y, 10)] - feq[gpu_fieldn_index(x, y, 10)] + feq[gpu_fieldn_index(x, y, 12)];
+
+		if(y > 0 && y < Ny_d-1){
+			f2[gpu_fieldn_index(x, y, 9)] = (1.0/3.0)*f2[gpu_fieldn_index(x-1, y-1, 9)] + f2[gpu_fieldn_index(x+1, y+1, 9)] - (1.0/3.0)*f2[gpu_fieldn_index(x+2, y+2, 9)];
+			f2[gpu_fieldn_index(x, y, 12)] = (1.0/3.0)*f2[gpu_fieldn_index(x-1, y+1, 12)] + f2[gpu_fieldn_index(x+1, y-1, 12)] - (1.0/3.0)*f2[gpu_fieldn_index(x+2, y-2, 12)];
+		}
+		f2[gpu_fieldn_index(x, y, 13)] = (1.0/3.0)*f2[gpu_fieldn_index(x-1, y, 13)] + f2[gpu_fieldn_index(x+1, y, 13)] - (1.0/3.0)*f2[gpu_fieldn_index(x+2, y, 13)];
+	}
+
+	if(x == 2){
+		f2[gpu_fieldn_index(x, y, 13)] = (1.0/6.0)*f2[gpu_fieldn_index(x-2, y, 13)] + (4.0/3.0)*f2[gpu_fieldn_index(x+1, y, 13)] - (1.0/2.0)*f2[gpu_fieldn_index(x+2, y, 13)];
 	}
 }
 
@@ -399,12 +456,14 @@ __global__ void gpu_compute_flow_properties(unsigned int t, double *r, double *u
 	E[threadIdx.x] = rho*(ux*ux + uy*uy);
 
 	// compute analytical results
-    double uxa;
-    poiseulle_eval(x, y, &uxa);
+    double uxa = poiseulle_eval(x, y, &uxa);
 
-     // compute terms for L2 error
+    // compute terms for L2 error
     uxe2[threadIdx.x]  = (ux - uxa)*(ux - uxa);
     uxa2[threadIdx.x]  = uxa*uxa;
+
+    //printf("ux: %g uxa: %g%s\n", ux, uxa);
+	//printf("uxe2: %g uxa2: %g\n", uxe2, uxa2);
 
 	__syncthreads();
 
