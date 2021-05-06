@@ -19,8 +19,7 @@ __constant__ double rho0_d, u_max_d, nu_d, tau_d, mi_ar_d;
 
 //Lattice Data
 __constant__ double as_d, w0_d, wp_d, ws_d, wt_d, wq_d;
-__device__ int *ex_d;
-__device__ int *ey_d;
+__device__ int *ex_d, *ey_d;
 
 // Mesh data
 __device__ bool *walls_d, *inlet_d, *outlet_d;
@@ -148,6 +147,31 @@ __device__ void gpu_recursive(unsigned int x, unsigned int y, double rho, double
 	}
 }
 
+__device__ void gpu_recursive_inlet_pressure(unsigned int x, unsigned int y, double *a, double *frec){
+
+	double cs = 1.0/as_d;
+	double cs2 = cs*cs;
+	double cs4 = cs2*cs2;
+	double cs6 = cs4*cs2;
+
+	double A = 1.0/(cs2);
+	double B = 1.0/(2.0*cs4);
+	double C = 1.0/(6.0*cs6);
+
+	double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
+
+	// Calculating the regularized recursive distribution
+	double H[10];
+	for(int n = 0; n < q; ++n){
+		hermite_polynomial(ex_d[n], ey_d[n], cs, H);
+
+		//					f 			= W *  (   0      + A*(    x     +     y)     + B*(    xx    +     xy/yx   +    yy)     + C*(   xxx    +    yxx    +    xyy    +    yyy))
+		frec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + A*(a[1]*H[1] + a[2]*H[2]) + B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]) + C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]));
+	}
+
+
+}
+
 __device__ void gpu_source(unsigned int x, unsigned int y, double gx, double gy, double rho, double ux, double uy, double *S){
 
 	double cs = 1.0/as_d;
@@ -222,9 +246,6 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 
 	unsigned int x_att, y_att;
 
-	const double gx = 0.0;
-	const double gy = 0.0;
-
 	double rho = 0, ux_i = 0, uy_i = 0, Pxx = 0, Pxy = 0, Pyy = 0;
 	for(int n = 0; n < q; ++n){
 		x_att = (x - ex_d[n] + Nx_d)%Nx_d;
@@ -238,8 +259,8 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 		Pyy += f1[gpu_fieldn_index(x_att, y_att, n)]*ey_d[n]*ey_d[n];
 	}
 
-	double ux = (ux_i + 0.5*rho*gx)/rho;
-	double uy = (uy_i + 0.5*rho*gy)/rho;
+	double ux = ux_i/rho;
+	double uy = uy_i/rho;
 
 	double cs = 1.0/as_d;
 	double cs2 = cs*cs;
@@ -272,45 +293,79 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 
 	// Collision Step
 	for(int n = 0; n < q; ++n){
-		f2[gpu_fieldn_index(x, y, n)] = omega*feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*frec[gpu_fieldn_index(x, y, n)];// + (1 - 0.5*omega)*S[gpu_fieldn_index(x, y, n)];
+		f2[gpu_fieldn_index(x, y, n)] = omega*feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*frec[gpu_fieldn_index(x, y, n)];
 	}
 
-	// Applying Inlet BC with prescribed velocity
 	if(x == 0){
-		double ux_in = u_max_d;
-		double uy_in = 0.0;
+		double rho_in = rho0_d;
+		//double uy_in = 0.0;
 
 		unsigned int NI = 11;
 		unsigned int I[11] = {0, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16};
 
-		double rhoI = 0.0, rhoaxy = 0.0;
+		double rhoax = 0.0, rhoaxx = 0.0, rhoaxy = 0.0, rhoaxxx = 0.0, rhoaxxy = 0.0;
 		for(int n = 0; n < NI; ++n){
 			unsigned int ni = I[n];
-			rhoI += f2[gpu_fieldn_index(x, y, ni)];
+
+			double ex2 = ex_d[ni]*ex_d[ni];
+			rhoax += f2[gpu_fieldn_index(x, y, ni)]*ex_d[n];
+			rhoaxx += f2[gpu_fieldn_index(x, y, ni)]*(ex2 - cs2);
 			rhoaxy += f2[gpu_fieldn_index(x, y, ni)]*ex_d[ni]*ey_d[ni];
+			rhoaxxx += f2[gpu_fieldn_index(x, y, ni)]*(ex2 - 3*cs2)*ex_d[n];
+			rhoaxxy += f2[gpu_fieldn_index(x, y, ni)]*(ex2 - cs2)*ey_d[n];
 		}
 
-		double ux_in2 = ux_in*ux_in;
-		double ux_in3 = ux_in*ux_in*ux_in;
+		double ax = 0.801965942378094*rhoaxxx + 2.81424743597281*rhoaxx + 3.86310204316732*rhoax + 1.02814710445382*rho_in;
+		double axx = 0.89703381557917*rhoaxxx + 3.14785825940274*rhoaxx + 2.08396073484102*rhoax + 0.740060658742184*rho_in;
+		double axy = 2.57129750702885*rhoaxxy + 3.73177207142366*rhoaxy;
+		double axxx = 2.28393633549532*rhoaxxx + 0.996385334990318*rhoaxx + 0.659631960457206*rhoax + 0.207957767581293*rho_in;
+		double axxy = 2.82710005410884*rhoaxxy + 1.90405540527407*rhoaxy;
 
-		double rho = (129600*rhoI)/((5*sqrt(193.0)+5525)*ux_in3 + (-31380-1740*sqrt(193.0))*ux_in2 + (-54144-720.0*sqrt(193.0))*ux_in + (808*sqrt(193.0)+94712));
-		double tauxy = (-270*rhoaxy)/((4*sqrt(193.0)+190)*ux_in - 135);
+		double ay = 0.0, ayy = 0.0, axyy = 0.0, ayyy = 0.0;
+		double a0 = rho_in;
+
+		double a[10] = {a0, ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy};
+
+		gpu_recursive_inlet_pressure(x, y, a, frec);
+
+		double rho = 0, ux_i = 0, uy_i = 0, Pxx = 0, Pxy = 0, Pyy = 0;
+		for(int n = 0; n < q; ++n){
+			rho += frec[gpu_fieldn_index(x, y, n)];
+			ux_i += (frec[gpu_fieldn_index(x, y, n)]*ex_d[n]);
+			uy_i += (frec[gpu_fieldn_index(x, y, n)]*ey_d[n]);
+			Pxx += frec[gpu_fieldn_index(x, y, n)]*ex_d[n]*ex_d[n];
+			Pxy += frec[gpu_fieldn_index(x, y, n)]*ex_d[n]*ey_d[n];
+			Pyy += frec[gpu_fieldn_index(x, y, n)]*ey_d[n]*ey_d[n];
+		}
+
+		double ux = ux_i/rho;
+		double uy = uy_i/rho;
+
+		gpu_equilibrium(x, y, rho, ux, uy, feq);
+
+		double fneq;
+		double tauxx = 0.0, tauxy = 0.0, tauyy = 0.0;
+		for(int n = 0; n < q; ++n){
+			fneq = frec[gpu_fieldn_index(x, y, n)] - feq[gpu_fieldn_index(x, y, n)];
+
+			tauxx += (fneq)*ex_d[n]*ex_d[n];
+			tauxy += (fneq)*ex_d[n]*ey_d[n];
+			tauyy += (fneq)*ey_d[n]*ey_d[n];
+		}
 
 		r[gpu_scalar_index(x, y)] = rho;
-		u[gpu_scalar_index(x, y)] = ux_in;
-		v[gpu_scalar_index(x, y)] = uy_in;
+		u[gpu_scalar_index(x, y)] = ux;
+		v[gpu_scalar_index(x, y)] = uy;
+		txx[gpu_scalar_index(x, y)] = tauxx;
 		txy[gpu_scalar_index(x, y)] = tauxy;
-
-		gpu_recursive(x, y, rho, ux, uy, tauxx, tauxy, tauyy, frec);
+		tyy[gpu_scalar_index(x, y)] = tauyy;
 
 		for(int n = 0; n < q; ++n){
 			f2[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
 		}
 	}
 
-	__syncthreads();
-
-	if(x == 1){
+	else if(x == 1){
 		f2[gpu_fieldn_index(x, y, 9)] = f2[gpu_fieldn_index(x, y, 11)] - feq[gpu_fieldn_index(x, y, 11)] + feq[gpu_fieldn_index(x, y, 9)];
 		f2[gpu_fieldn_index(x, y, 12)] = f2[gpu_fieldn_index(x, y, 10)] - feq[gpu_fieldn_index(x, y, 10)] + feq[gpu_fieldn_index(x, y, 12)];
 
@@ -321,7 +376,7 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 		f2[gpu_fieldn_index(x, y, 13)] = (1.0/3.0)*f2[gpu_fieldn_index(x-1, y, 13)] + f2[gpu_fieldn_index(x+1, y, 13)] - (1.0/3.0)*f2[gpu_fieldn_index(x+2, y, 13)];
 	}
 
-	if(x == 2){
+	else if(x == 2){
 		f2[gpu_fieldn_index(x, y, 13)] = (1.0/6.0)*f2[gpu_fieldn_index(x-2, y, 13)] + (4.0/3.0)*f2[gpu_fieldn_index(x+1, y, 13)] - (1.0/2.0)*f2[gpu_fieldn_index(x+2, y, 13)];
 	}
 }

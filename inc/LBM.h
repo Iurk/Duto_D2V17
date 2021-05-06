@@ -5,7 +5,13 @@
 
 extern __constant__ unsigned int q, Nx_d, Ny_d;
 
+extern __constant__ double as_d, w0_d, wp_d, ws_d, wt_d, wq_d;
+extern __device__ int *ex_d, *ey_d;
 extern __device__ bool *walls_d, *inlet_d, *outlet_d;
+
+extern __device__ void hermite_polynomial(int, int, double, double*);
+extern __device__ void hermite_moments(double, double, double, double, double, double, double*);
+extern __device__ void gpu_recursive(unsigned int, unsigned int, double, double, double, double, double, double, double*);
 
 void initialization(double*, double);
 void init_equilibrium(double*, double*, double*, double*);
