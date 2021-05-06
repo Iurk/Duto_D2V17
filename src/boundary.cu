@@ -12,6 +12,7 @@ __device__ __forceinline__ size_t gpu_fieldn_index(unsigned int x, unsigned int 
 	return (Nx_d*(Ny_d*(d) + y) + x);
 }
 
+__global__ void gpu_inlet(double, double*, double*, double*, double*, double*, double*, double*);
 __global__ void gpu_bounce_back(double*);
 __global__ void gpu_outlet(double, double*);
 
@@ -59,6 +60,57 @@ __device__ void device_bounce_back(unsigned int x, unsigned int y, double *f){
 	}
 }
 
+__device__ void device_inlet(unsigned int x, unsigned int y, double ux_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txy){
+
+	double uy_in = 0.0;
+
+	double rho, tauxy;
+
+	if(x == 0){
+		unsigned int NI = 11;
+		unsigned int I[11] = {0, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16};
+
+		double rhoI = 0.0, rhoaxy = 0.0;
+		for(int n = 0; n < NI; ++n){
+			unsigned int ni = I[n];
+			rhoI += f[gpu_fieldn_index(x, y, ni)];
+			rhoaxy += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni]*ey_d[ni];
+		}
+
+		double ux_in2 = ux_in*ux_in;
+		double ux_in3 = ux_in*ux_in*ux_in;
+
+		rho = (129600*rhoI)/((5*sqrt(193.0)+5525)*ux_in3 + (-31380-1740*sqrt(193.0))*ux_in2 + (-54144-720.0*sqrt(193.0))*ux_in + (808*sqrt(193.0)+94712));
+		tauxy = (-270*rhoaxy)/((4*sqrt(193.0)+190)*ux_in - 135);
+
+		r[gpu_scalar_index(x, y)] = rho;
+		u[gpu_scalar_index(x, y)] = ux_in;
+		v[gpu_scalar_index(x, y)] = uy_in;
+		txy[gpu_scalar_index(x, y)] = tauxy;
+
+		gpu_recursive(x, y, rho, ux_in, uy_in, 0.0, tauxy, 0.0, frec);
+
+		for(int n = 0; n < q; ++n){
+			f[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
+		}
+	}
+
+	else if(x == 1){
+		f[gpu_fieldn_index(x, y, 9)] = f[gpu_fieldn_index(x, y, 11)] - feq[gpu_fieldn_index(x, y, 11)] + feq[gpu_fieldn_index(x, y, 9)];
+		f[gpu_fieldn_index(x, y, 12)] = f[gpu_fieldn_index(x, y, 10)] - feq[gpu_fieldn_index(x, y, 10)] + feq[gpu_fieldn_index(x, y, 12)];
+
+		if(y > 0 && y < Ny_d-1){
+			f[gpu_fieldn_index(x, y, 9)] = (1.0/3.0)*f[gpu_fieldn_index(x-1, y-1, 9)] + f[gpu_fieldn_index(x+1, y+1, 9)] - (1.0/3.0)*f[gpu_fieldn_index(x+2, y+2, 9)];
+			f[gpu_fieldn_index(x, y, 12)] = (1.0/3.0)*f[gpu_fieldn_index(x-1, y+1, 12)] + f[gpu_fieldn_index(x+1, y-1, 12)] - (1.0/3.0)*f[gpu_fieldn_index(x+2, y-2, 12)];
+		}
+		f[gpu_fieldn_index(x, y, 13)] = (1.0/3.0)*f[gpu_fieldn_index(x-1, y, 13)] + f[gpu_fieldn_index(x+1, y, 13)] - (1.0/3.0)*f[gpu_fieldn_index(x+2, y, 13)];
+	}
+
+	else if(x == 2){
+		f[gpu_fieldn_index(x, y, 13)] = (1.0/6.0)*f[gpu_fieldn_index(x-2, y, 13)] + (4.0/3.0)*f[gpu_fieldn_index(x+1, y, 13)] - (1.0/2.0)*f[gpu_fieldn_index(x+2, y, 13)];
+	}
+}
+
 __host__ void bounce_back(double *f){
 
 	dim3 grid(Nx/nThreads, Ny, 1);
@@ -78,40 +130,27 @@ __global__ void gpu_bounce_back(double *f){
 		device_bounce_back(x, y, f);
 	}
 }
-/*
-__host__ void inlet_BC(double u_def, double *f, double *r, double *u, double *v){
+
+__host__ void inlet_BC(double ux_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txy){
 
 	dim3 grid(Nx/nThreads, Ny, 1);
 	dim3 block(nThreads, 1, 1);
 
-	gpu_inlet<<< grid, block >>>(u_def, f, r, u, v);
+	gpu_inlet<<< grid, block >>>(ux_in, f, feq, frec, r, u, v, txy);
 	getLastCudaError("gpu_inlet kernel error");
 }
 
-__global__ void gpu_inlet(double udef, double *f, double *r, double *u, double *v){
+__global__ void gpu_inlet(double ux_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txy){
 
 	unsigned int y = blockIdx.y;
 	unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
 
-	if(x == 0){
-
-		unsigned int I[11] = {0, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16};
-
-		double rhoI = 0.0, rhoaxy = 0.0;
-		for(int n = 0; n < q; ++n){
-			unsigned int ni = I[n];
-			rhoI += f[gpu_fieldn_index(x, y, ni)];
-			rhoaxy += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni]*ey_d[ni];
-		}
-
-		double udef2 = u_def*u_def;
-		double udef3 = u_def*u_def*u_def;
-
-		double rho = (129600*rhoI)/((5*sqrt(193)+5525)*udef3 + (-31380-1740*sqrt(193))*udef2 + (-54144-720*sqrt(193))*udef + (808*sqrt(193)+94712));
-		double tauxy = (-270*rhoaxy)/((4*sqrt(193)+190)*udef - 135);
+	bool node_inlet = inlet_d[gpu_scalar_index(x, y)];
+	if(node_inlet){
+		device_inlet(x, y, ux_in, f, feq, frec, r, u, v, txy);
 	}
 }
-*/
+
 __host__ void outlet_BC(double rho, double *f){
 
 	dim3 grid(Nx/nThreads, Ny, 1);
