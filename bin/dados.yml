@@ -1,6 +1,6 @@
 domain:
   Nx: 1024
-  Ny: 64
+  Ny: 128
 
 simulation:
   lattice: D2V17
