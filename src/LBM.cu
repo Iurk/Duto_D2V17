@@ -142,8 +142,11 @@ __device__ void gpu_recursive(unsigned int x, unsigned int y, double rho, double
 		hermite_polynomial(ex_d[n], ey_d[n], cs, H);
 		hermite_moments(rho, ux, uy, tauxx, tauxy, tauyy, a);
 
-		//					f 			= W *  (   0      + A*(    x     +     y)     + B*(    xx    +     xy/yx   +    yy)     + C*(   xxx    +    yxx    +    xyy    +    yyy))
-		frec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + A*(a[1]*H[1] + a[2]*H[2]) + B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]) + C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]));
+		double order_1 = A*(a[1]*H[1] + a[2]*H[2]);
+		double order_2 = B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]);
+		double order_3 = C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]);
+
+		frec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + order_1 + order_2 + order_3);
 	}
 }
 
@@ -157,7 +160,14 @@ __device__ void gpu_recursive_inlet_pressure(unsigned int x, unsigned int y, dou
 	double A = 1.0/(cs2);
 	double B = 1.0/(2.0*cs4);
 	double C = 1.0/(6.0*cs6);
-
+/*
+	if(x == 0){
+		if(y == 5){
+			printf("a0: %g ax: %g ay: %g axx: %g axy: %g ayy: %g\n", a[0], a[1], a[2], a[3], a[4], a[5]);
+			printf("axxx: %g axxy: %g axyy: %g ayyy: %g\n", a[6], a[7], a[8], a[9]);
+		}
+	}
+*/
 	double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
 
 	// Calculating the regularized recursive distribution
@@ -165,11 +175,12 @@ __device__ void gpu_recursive_inlet_pressure(unsigned int x, unsigned int y, dou
 	for(int n = 0; n < q; ++n){
 		hermite_polynomial(ex_d[n], ey_d[n], cs, H);
 
-		//					f 			= W *  (   0      + A*(    x     +     y)     + B*(    xx    +     xy/yx   +    yy)     + C*(   xxx    +    yxx    +    xyy    +    yyy))
-		frec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + A*(a[1]*H[1] + a[2]*H[2]) + B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]) + C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]));
+		double order_1 = A*(a[1]*H[1] + a[2]*H[2]);
+		double order_2 = B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]);
+		double order_3 = C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]);
+
+		frec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + order_1 + order_2 + order_3);
 	}
-
-
 }
 
 __device__ void gpu_source(unsigned int x, unsigned int y, double gx, double gy, double rho, double ux, double uy, double *S){
@@ -297,8 +308,8 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 	}
 
 	if(x == 0){
-		double rho_in = rho0_d;
-		//double uy_in = 0.0;
+		double rho_in = 1.0;
+		double uy_in = 0.0;
 
 		unsigned int NI = 11;
 		unsigned int I[11] = {0, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16};
@@ -321,27 +332,48 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 		double axxx = 2.28393633549532*rhoaxxx + 0.996385334990318*rhoaxx + 0.659631960457206*rhoax + 0.207957767581293*rho_in;
 		double axxy = 2.82710005410884*rhoaxxy + 1.90405540527407*rhoaxy;
 
-		double ay = 0.0, ayy = 0.0, axyy = 0.0, ayyy = 0.0;
-		double a0 = rho_in;
-
+		double a0 = rho_in, ay = 0.0, ayy = 0.0, axyy = 0.0, ayyy = 0.0;
 		double a[10] = {a0, ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy};
 
+		if(y == 5){
+			printf("ax: %g axx: %g axy: %g\n", ax, axx, axy);
+			printf("axxx: %g axxy: %g\n", axxx, axxy);
+		}
+/*
+		if(y == 5){
+			printf("frec\n");
+			printf("f0: %g f1: %g f2: %g\n", frec[gpu_fieldn_index(x, y, 0)], frec[gpu_fieldn_index(x, y, 1)], frec[gpu_fieldn_index(x, y, 2)]);
+			printf("f3: %g f4: %g f5: %g\n", frec[gpu_fieldn_index(x, y, 3)], frec[gpu_fieldn_index(x, y, 4)], frec[gpu_fieldn_index(x, y, 5)]);
+			printf("f6: %g f7: %g f8: %g\n", frec[gpu_fieldn_index(x, y, 6)], frec[gpu_fieldn_index(x, y, 7)], frec[gpu_fieldn_index(x, y, 8)]);
+			printf("f9: %g f10: %g f11: %g\n", frec[gpu_fieldn_index(x, y, 9)], frec[gpu_fieldn_index(x, y, 10)], frec[gpu_fieldn_index(x, y, 11)]);
+			printf("f12: %g f13: %g f14: %g\n", frec[gpu_fieldn_index(x, y, 12)], frec[gpu_fieldn_index(x, y, 13)], frec[gpu_fieldn_index(x, y, 14)]);
+			printf("f15: %g f16: %g\n", frec[gpu_fieldn_index(x, y, 15)], frec[gpu_fieldn_index(x, y, 16)]);
+		}
+*/
 		gpu_recursive_inlet_pressure(x, y, a, frec);
+/*
+		if(y == 5){
+			printf("frec after\n");
+			printf("f0: %g f1: %g f2: %g\n", frec[gpu_fieldn_index(x, y, 0)], frec[gpu_fieldn_index(x, y, 1)], frec[gpu_fieldn_index(x, y, 2)]);
+			printf("f3: %g f4: %g f5: %g\n", frec[gpu_fieldn_index(x, y, 3)], frec[gpu_fieldn_index(x, y, 4)], frec[gpu_fieldn_index(x, y, 5)]);
+			printf("f6: %g f7: %g f8: %g\n", frec[gpu_fieldn_index(x, y, 6)], frec[gpu_fieldn_index(x, y, 7)], frec[gpu_fieldn_index(x, y, 8)]);
+			printf("f9: %g f10: %g f11: %g\n", frec[gpu_fieldn_index(x, y, 9)], frec[gpu_fieldn_index(x, y, 10)], frec[gpu_fieldn_index(x, y, 11)]);
+			printf("f12: %g f13: %g f14: %g\n", frec[gpu_fieldn_index(x, y, 12)], frec[gpu_fieldn_index(x, y, 13)], frec[gpu_fieldn_index(x, y, 14)]);
+			printf("f15: %g f16: %g\n", frec[gpu_fieldn_index(x, y, 15)], frec[gpu_fieldn_index(x, y, 16)]);
+		}
+*/
 
 		double rho = 0, ux_i = 0, uy_i = 0, Pxx = 0, Pxy = 0, Pyy = 0;
 		for(int n = 0; n < q; ++n){
 			rho += frec[gpu_fieldn_index(x, y, n)];
 			ux_i += (frec[gpu_fieldn_index(x, y, n)]*ex_d[n]);
 			uy_i += (frec[gpu_fieldn_index(x, y, n)]*ey_d[n]);
-			Pxx += frec[gpu_fieldn_index(x, y, n)]*ex_d[n]*ex_d[n];
-			Pxy += frec[gpu_fieldn_index(x, y, n)]*ex_d[n]*ey_d[n];
-			Pyy += frec[gpu_fieldn_index(x, y, n)]*ey_d[n]*ey_d[n];
 		}
 
-		double ux = ux_i/rho;
-		double uy = uy_i/rho;
+		double ux_in = ux_i/rho;
+		uy_in = uy_i/rho;
 
-		gpu_equilibrium(x, y, rho, ux, uy, feq);
+		gpu_equilibrium(x, y, rho_in, ux_in, uy_in, feq);
 
 		double fneq;
 		double tauxx = 0.0, tauxy = 0.0, tauyy = 0.0;
@@ -353,9 +385,17 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 			tauyy += (fneq)*ey_d[n]*ey_d[n];
 		}
 
+		if(x == 0){
+			if(y == 5){
+				printf("rho: %g ux: %g uy: %g\n", rho, ux_in, uy_in);
+				printf("tauxx: %g tauxy: %g tauyy: %g\n", tauxx, tauxy, tauyy);
+			}
+		}
+		
+
 		r[gpu_scalar_index(x, y)] = rho;
-		u[gpu_scalar_index(x, y)] = ux;
-		v[gpu_scalar_index(x, y)] = uy;
+		u[gpu_scalar_index(x, y)] = ux_in;
+		v[gpu_scalar_index(x, y)] = uy_in;
 		txx[gpu_scalar_index(x, y)] = tauxx;
 		txy[gpu_scalar_index(x, y)] = tauxy;
 		tyy[gpu_scalar_index(x, y)] = tauyy;
