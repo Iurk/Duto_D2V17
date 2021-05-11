@@ -385,8 +385,8 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 			tauyy += (fneq)*ey_d[n]*ey_d[n];
 		}
 */		
-		double tauxy = axy;
-		double ux_in = axxy/(2*tauxy);
+		double ux_in = pow((axxx/rho_in), 1./3.);
+		double tauxy = axxy/(2*ux_in);
 
 		gpu_recursive(x, y, rho, ux_in, uy_in, 0.0, tauxy, 0.0, frec);
 
