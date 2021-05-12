@@ -252,6 +252,9 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 
 	const double omega = 1.0/tau_d;
 
+	double cs = 1.0/as_d;
+	double cs2 = cs*cs;
+
 	unsigned int y = blockIdx.y;
 	unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
 
@@ -263,43 +266,28 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 		y_att = (y - ey_d[n] + Ny_d)%Ny_d;
 
 		rho += f1[gpu_fieldn_index(x_att, y_att, n)];
-		ux_i += (f1[gpu_fieldn_index(x_att, y_att, n)]*ex_d[n]);
-		uy_i += (f1[gpu_fieldn_index(x_att, y_att, n)]*ey_d[n]);
-		Pxx += f1[gpu_fieldn_index(x_att, y_att, n)]*ex_d[n]*ex_d[n];
+		ux_i += f1[gpu_fieldn_index(x_att, y_att, n)]*ex_d[n];
+		uy_i += f1[gpu_fieldn_index(x_att, y_att, n)]*ey_d[n];
+		Pxx += f1[gpu_fieldn_index(x_att, y_att, n)]*(ex_d[n]*ex_d[n] - cs2);
 		Pxy += f1[gpu_fieldn_index(x_att, y_att, n)]*ex_d[n]*ey_d[n];
-		Pyy += f1[gpu_fieldn_index(x_att, y_att, n)]*ey_d[n]*ey_d[n];
+		Pyy += f1[gpu_fieldn_index(x_att, y_att, n)]*(ey_d[n]*ey_d[n] - cs2);
 	}
 
 	double ux = ux_i/rho;
 	double uy = uy_i/rho;
-
-	double cs = 1.0/as_d;
-	double cs2 = cs*cs;
+	
+	double tauxx = Pxx - rho*ux*ux;
+	double tauxy = Pxy - rho*ux*uy;
+	double tauyy = Pyy - rho*uy*uy;
 
 	r[gpu_scalar_index(x, y)] = rho;
 	u[gpu_scalar_index(x, y)] = ux;
 	v[gpu_scalar_index(x, y)] = uy;
-
-	//gpu_source(x, y, gx, gy, rho, ux, uy, S);
-	gpu_equilibrium(x, y, rho, ux, uy, feq);
-
-	double fneq;
-	double tauxx = 0.0, tauxy = 0.0, tauyy = 0.0;
-	for(int n = 0; n < q; ++n){
-		x_att = (x - ex_d[n] + Nx_d)%Nx_d;
-		y_att = (y - ey_d[n] + Ny_d)%Ny_d;
-
-		fneq = f1[gpu_fieldn_index(x_att, y_att, n)] - feq[gpu_fieldn_index(x, y, n)];
-
-		tauxx += (fneq)*ex_d[n]*ex_d[n];
-		tauxy += (fneq)*ex_d[n]*ey_d[n];
-		tauyy += (fneq)*ey_d[n]*ey_d[n];
-	}
-
 	txx[gpu_scalar_index(x, y)] = tauxx;
 	txy[gpu_scalar_index(x, y)] = tauxy;
 	tyy[gpu_scalar_index(x, y)] = tauyy;
-	
+
+	gpu_equilibrium(x, y, rho, ux, uy, feq);
 	gpu_recursive(x, y, rho, ux, uy, tauxx, tauxy, tauyy, frec);
 
 	// Collision Step
@@ -335,11 +323,13 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 		double a0 = rho_in, ay = 0.0, ayy = 0.0, axyy = 0.0, ayyy = 0.0;
 		double a[10] = {a0, ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy};
 
+		gpu_recursive_inlet_pressure(x, y, a, frec);
+/*
 		if(y == 5){
 			printf("ax: %g axx: %g axy: %g\n", ax, axx, axy);
 			printf("axxx: %g axxy: %g\n", axxx, axxy);
 		}
-/*
+
 		if(y == 5){
 			printf("frec\n");
 			printf("f0: %g f1: %g f2: %g\n", frec[gpu_fieldn_index(x, y, 0)], frec[gpu_fieldn_index(x, y, 1)], frec[gpu_fieldn_index(x, y, 2)]);
@@ -349,8 +339,7 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 			printf("f12: %g f13: %g f14: %g\n", frec[gpu_fieldn_index(x, y, 12)], frec[gpu_fieldn_index(x, y, 13)], frec[gpu_fieldn_index(x, y, 14)]);
 			printf("f15: %g f16: %g\n", frec[gpu_fieldn_index(x, y, 15)], frec[gpu_fieldn_index(x, y, 16)]);
 		}
-*
-		gpu_recursive_inlet_pressure(x, y, a, frec);
+*/
 /*
 		if(y == 5){
 			printf("frec after\n");
@@ -362,48 +351,46 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 			printf("f15: %g f16: %g\n", frec[gpu_fieldn_index(x, y, 15)], frec[gpu_fieldn_index(x, y, 16)]);
 		}
 */
-/*
+
 		double rho = 0, ux_i = 0, uy_i = 0, Pxx = 0, Pxy = 0, Pyy = 0;
 		for(int n = 0; n < q; ++n){
+			double ex2 = ex_d[n]*ex_d[n];
+			double ey2 = ey_d[n]*ey_d[n];
+
 			rho += frec[gpu_fieldn_index(x, y, n)];
-			ux_i += (frec[gpu_fieldn_index(x, y, n)]*ex_d[n]);
-			uy_i += (frec[gpu_fieldn_index(x, y, n)]*ey_d[n]);
+			ux_i += frec[gpu_fieldn_index(x, y, n)]*ex_d[n];
+			uy_i += frec[gpu_fieldn_index(x, y, n)]*ey_d[n];
+			Pxx += frec[gpu_fieldn_index(x, y, n)]*(ex2 - cs2);
+			Pxy += frec[gpu_fieldn_index(x, y, n)]*ex_d[n]*ey_d[n];
+			Pyy += frec[gpu_fieldn_index(x, y, n)]*(ey2 - cs2);
 		}
 
 		double ux_in = ux_i/rho;
 		uy_in = uy_i/rho;
 
-		gpu_equilibrium(x, y, rho_in, ux_in, uy_in, feq);
-
-		double fneq;
-		double tauxx = 0.0, tauxy = 0.0, tauyy = 0.0;
-		for(int n = 0; n < q; ++n){
-			fneq = frec[gpu_fieldn_index(x, y, n)] - feq[gpu_fieldn_index(x, y, n)];
-
-			tauxx += (fneq)*ex_d[n]*ex_d[n];
-			tauxy += (fneq)*ex_d[n]*ey_d[n];
-			tauyy += (fneq)*ey_d[n]*ey_d[n];
-		}
-*/		
+		double tauxx_in = Pxx - rho*ux*ux;
+		double tauxy_in = Pxy - rho*ux*uy;
+		double tauyy_in = Pyy - rho*uy*uy;
+/*
 		double ux_in = pow((axxx/rho_in), 1./3.);
 		double tauxy = axxy/(2*ux_in);
 
 		gpu_recursive(x, y, rho, ux_in, uy_in, 0.0, tauxy, 0.0, frec);
-
+*/
 		r[gpu_scalar_index(x, y)] = rho_in;
 		u[gpu_scalar_index(x, y)] = ux_in;
 		v[gpu_scalar_index(x, y)] = uy_in;
-		txx[gpu_scalar_index(x, y)] = tauxx;
-		txy[gpu_scalar_index(x, y)] = tauxy;
-		tyy[gpu_scalar_index(x, y)] = tauyy;
-
+		txx[gpu_scalar_index(x, y)] = tauxx_in;
+		txy[gpu_scalar_index(x, y)] = tauxy_in;
+		tyy[gpu_scalar_index(x, y)] = tauyy_in;
+/*
 		if(x == 0){
 			if(y == 5){
 				printf("rho: %g ux: %g uy: %g\n", rho_in, ux_in, uy_in);
 				printf("tauxx: %g tauxy: %g tauyy: %g\n", tauxx, tauxy, tauyy);
 			}
 		}
-
+*/
 		for(int n = 0; n < q; ++n){
 			f2[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
 		}
