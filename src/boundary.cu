@@ -99,10 +99,14 @@ __device__ void device_inlet(unsigned int x, unsigned int y, double ux_in, doubl
 		f[gpu_fieldn_index(x, y, 9)] = f[gpu_fieldn_index(x, y, 11)] - feq[gpu_fieldn_index(x, y, 11)] + feq[gpu_fieldn_index(x, y, 9)];
 		f[gpu_fieldn_index(x, y, 12)] = f[gpu_fieldn_index(x, y, 10)] - feq[gpu_fieldn_index(x, y, 10)] + feq[gpu_fieldn_index(x, y, 12)];
 
-		if(y > 0 && y < Ny_d-1){
+		if(y > 0 && y < Ny_d-2){
 			f[gpu_fieldn_index(x, y, 9)] = (1.0/3.0)*f[gpu_fieldn_index(x-1, y-1, 9)] + f[gpu_fieldn_index(x+1, y+1, 9)] - (1.0/3.0)*f[gpu_fieldn_index(x+2, y+2, 9)];
+		}
+
+		if(y > 1 && y < Ny_d-1){
 			f[gpu_fieldn_index(x, y, 12)] = (1.0/3.0)*f[gpu_fieldn_index(x-1, y+1, 12)] + f[gpu_fieldn_index(x+1, y-1, 12)] - (1.0/3.0)*f[gpu_fieldn_index(x+2, y-2, 12)];
 		}
+		
 		f[gpu_fieldn_index(x, y, 13)] = (1.0/3.0)*f[gpu_fieldn_index(x-1, y, 13)] + f[gpu_fieldn_index(x+1, y, 13)] - (1.0/3.0)*f[gpu_fieldn_index(x+2, y, 13)];
 	}
 
@@ -172,7 +176,6 @@ __global__ void gpu_outlet(double rho, double *f){
 		for(int n = 0; n < q; ++n){
 			sumRho += f[gpu_fieldn_index(x-3, y, n)];
 		}
-
 
 		for(int n = 0; n < q; ++n){
 			f[gpu_fieldn_index(x, y, n)] = (rho/sumRho)*f[gpu_fieldn_index(x-3, y, n)];
