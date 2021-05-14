@@ -4,9 +4,9 @@ domain:
 
 simulation:
   lattice: D2V17
-  NSTEPS: 100000
+  NSTEPS: 10
   NSAVE: 100
-  NMSG: 1000
+  NMSG: 10
   meshprint: false
   erro_max: 1e-13
 
