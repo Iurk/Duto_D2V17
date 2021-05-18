@@ -12,7 +12,7 @@ __device__ __forceinline__ size_t gpu_fieldn_index(unsigned int x, unsigned int 
 	return (Nx_d*(Ny_d*(d) + y) + x);
 }
 
-__global__ void gpu_inlet(double, double*, double*, double*, double*, double*, double*, double*, double*, double*);
+__global__ void gpu_inlet(double, double, double*, double*, double*, double*, double*, double*, double*, double*, double*, unsigned int);
 __global__ void gpu_bounce_back(double*);
 __global__ void gpu_outlet(double, double, double*, double*, double*, double*, double*, double*, double*, double*, double*, unsigned int);
 __global__ void gpu_wall_velocity(double*, double*, double*, double*, double*, double*, double*, double*, double*);
@@ -106,7 +106,7 @@ __device__ void device_bounce_back(unsigned int x, unsigned int y, double *f){
 	}
 }
 
-__device__ void device_inlet(unsigned int x, unsigned int y, double ux_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
+__device__ void device_inlet_VP(unsigned int x, unsigned int y, double ux_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
 
 	double moments[2];
 	double uy_in = 0.0;
@@ -363,23 +363,38 @@ __global__ void gpu_bounce_back(double *f){
 	}
 }
 
-__host__ void inlet_BC(double ux_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
+__host__ void inlet_BC(double rho, double ux_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy, std::string mode){
 
 	dim3 grid(Nx/nThreads, Ny, 1);
 	dim3 block(nThreads, 1, 1);
 
-	gpu_inlet<<< grid, block >>>(ux_in, f, feq, frec, r, u, v, txx, txy, tyy);
+	unsigned int mode_num;
+	if(mode == "VP"){
+		mode_num = 1;
+	}
+	else if(mode == "PP"){
+		mode_num = 2;
+	}
+
+
+
+	gpu_inlet<<< grid, block >>>(ux_in, f, feq, frec, r, u, v, txx, txy, tyy, mode_num);
 	getLastCudaError("gpu_inlet kernel error");
 }
 
-__global__ void gpu_inlet(double ux_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
+__global__ void gpu_inlet(double ux_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy, unsigned int mode_num){
 
 	unsigned int y = blockIdx.y;
 	unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
 
 	bool node_inlet = inlet_d[gpu_scalar_index(x, y)];
 	if(node_inlet){
-		device_inlet(x, y, ux_in, f, feq, frec, r, u, v, txx, txy, tyy);
+		if(mode_num == 1){
+			device_inlet_VP(x, y, ux_in, f, feq, frec, r, u, v, txx, txy, tyy);
+		}
+		else if(mode_num == 2){
+
+		}
 	}
 
 	__syncthreads();
@@ -392,8 +407,7 @@ __host__ void outlet_BC(double rho, double ux_in, double *f, double *feq, double
 	dim3 block(nThreads, 1, 1);
 
 	unsigned int mode_num;
-
-	if(mode.c_str() == "FD"){
+	if(mode == "FD"){
 		mode_num = 1;
 	}
 	else if(mode == "FDP"){
@@ -401,6 +415,9 @@ __host__ void outlet_BC(double rho, double ux_in, double *f, double *feq, double
 	}
 	else if(mode == "VP"){
 		mode_num = 3;
+	}
+	else if(mode == "PP"){
+		mode_num = 4
 	}
 
 	gpu_outlet<<< grid, block >>>(rho, ux_in, f, feq, frec, r, u, v, txx, txy, tyy, mode_num);
@@ -422,6 +439,9 @@ __global__ void gpu_outlet(double rho, double ux_in, double *f, double *feq, dou
 		}
 		else if(mode_num == 3){
 			device_outlet_VP(x, y, ux_in, f, feq, frec, r, u, v, txx, txy, tyy);
+		}
+		else if(mode_num == 4){
+
 		}
 	}
 
