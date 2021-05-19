@@ -156,8 +156,8 @@ int main(int argc, char const *argv[]){
 		}
 */
 		stream_collide_save(f1_gpu, f2_gpu, feq_gpu, frec_gpu, S_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, need_scalars);
-		inlet_BC(0, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu);
-		outlet_BC(0, 0, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, "VP");
+		inlet_BC(1.0, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, "PP");
+		outlet_BC(0.9, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, "FDP");
 		//bounce_back(f2_gpu);
 		wall_velocity(f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu);
 
@@ -174,7 +174,7 @@ int main(int argc, char const *argv[]){
 		conv_error = report_convergence(n+1, ux_gpu, ux_old_gpu, conv_host, conv_gpu, msg);
 
 		end_step = n+1;
-		if(conv_error < erro_max && n > 100){
+		if(conv_error < erro_max && n > 1000){
 			break;
 		}
 
