@@ -150,32 +150,6 @@ __device__ void gpu_recursive(unsigned int x, unsigned int y, double rho, double
 	}
 }
 
-__device__ void gpu_recursive_inlet_pressure(unsigned int x, unsigned int y, double *a, double *frec){
-
-	double cs = 1.0/as_d;
-	double cs2 = cs*cs;
-	double cs4 = cs2*cs2;
-	double cs6 = cs4*cs2;
-
-	double A = 1.0/(cs2);
-	double B = 1.0/(2.0*cs4);
-	double C = 1.0/(6.0*cs6);
-
-	double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
-
-	// Calculating the regularized recursive distribution
-	double H[10];
-	for(int n = 0; n < q; ++n){
-		hermite_polynomial(ex_d[n], ey_d[n], cs, H);
-
-		double order_1 = A*(a[1]*H[1] + a[2]*H[2]);	
-		double order_2 = B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]);
-		double order_3 = C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]);
-
-		frec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + order_1 + order_2 + order_3);
-	}
-}
-
 __device__ void gpu_source(unsigned int x, unsigned int y, double gx, double gy, double rho, double ux, double uy, double *S){
 
 	double cs = 1.0/as_d;
