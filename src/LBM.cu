@@ -303,7 +303,7 @@ __host__ double compute_convergence(double *u, double *u_old, double *conv_host,
 __global__ void gpu_compute_convergence(double *u, double *u_old, double *conv){
 
 	unsigned int y = blockIdx.y*blockDim.y + threadIdx.y;
-	unsigned int x = Nx_d/2;
+	unsigned int x = (Nx_d-1)/4;
 
 	extern __shared__ double data[];
 
