@@ -1,26 +1,26 @@
 domain:
-  Nx: 1024
-  Ny: 64
+  Nx: 256
+  Ny: 128
 
 simulation:
   lattice: D2V17
-  NSTEPS: 100000
-  NSAVE: 1000
+  NSTEPS: 500000
+  NSAVE: 2000
   NMSG: 1000
   meshprint: false
-  erro_max: 1e-13
+  erro_max: 1e-17
 
 gpu:
   nThreads: 32
 
 input:
-  Re: 1
+  Re: 100
   u_max: 0.04
   rho0: 1.0
 
 output:
   plot_module: true
-  plot_profiles: false
+  plot_profiles: true
 
 air:
   rho: 1.21
