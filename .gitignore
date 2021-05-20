@@ -2,6 +2,7 @@
 bin/Mesh/
 bin/Results/
 bin/Velocity/
+bin/Pressure/
 obj/
 __pycache__/
 
