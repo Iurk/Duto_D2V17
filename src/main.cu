@@ -156,10 +156,11 @@ int main(int argc, char const *argv[]){
 		}
 */
 		stream_collide_save(f1_gpu, f2_gpu, feq_gpu, frec_gpu, S_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, need_scalars);
-		inlet_BC(1.0, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, "PP");
-		outlet_BC(0.9, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, "FDP");
+		inlet_BC(0, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, "VP");
+		outlet_BC(0, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, "VP");
 		//bounce_back(f2_gpu);
 		wall_velocity(f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu);
+		corners(f2_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu);
 
 		if(save){
 			save_scalar("rho",rho_gpu, scalar_host, n+1);
