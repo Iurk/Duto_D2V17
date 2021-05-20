@@ -16,6 +16,7 @@ __global__ void gpu_inlet(double, double, double*, double*, double*, double*, do
 __global__ void gpu_bounce_back(double*);
 __global__ void gpu_outlet(double, double, double*, double*, double*, double*, double*, double*, double*, double*, double*, unsigned int);
 __global__ void gpu_wall_velocity(double*, double*, double*, double*, double*, double*, double*, double*, double*);
+__global__ void gpu_corners(double*, double*, double*, double*, double*, double*, double*, double*);
 
 // Distribution
 __device__ void gpu_recursive_inlet_pressure(unsigned int x, unsigned int y, double rho, double *a, double *frec){
@@ -45,18 +46,90 @@ __device__ void gpu_recursive_inlet_pressure(unsigned int x, unsigned int y, dou
 }
 
 // Moments
-__device__ void known_moments(unsigned int x, unsigned int y, unsigned int NI, unsigned int *I, double *f, double *moments){
+__device__ void known_moments(unsigned int x, unsigned int y, unsigned int NI, unsigned int *I, double *f, double *rhoI){
 
-	double rhoI = 0.0, rhoaxy = 0.0;
+	double rhoI_local = 0.0;
 	for(int n = 0; n < NI; ++n){
 		unsigned int ni = I[n];
 
-		rhoI += f[gpu_fieldn_index(x, y, ni)];
-		rhoaxy += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni]*ey_d[ni];
+		rhoI_local += f[gpu_fieldn_index(x, y, ni)];
 	}
 
-	moments[0] = rhoI;
-	moments[1] = rhoaxy;
+	*rhoI = rhoI_local;
+}
+
+__device__ void known_moments(unsigned int x, unsigned int y, unsigned int NI, unsigned int *I, double *f, double *rhoI, double *rhomxy){
+
+	double rhoI_local = 0.0, rhomxy_local = 0.0;
+	for(int n = 0; n < NI; ++n){
+		unsigned int ni = I[n];
+
+		rhoI_local += f[gpu_fieldn_index(x, y, ni)];
+		rhomxy_local += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni]*ey_d[ni];
+	}
+	
+	*rhoI = rhoI_local;
+	*rhomxy = rhomxy_local;
+}
+
+__device__ void known_moments(unsigned int x, unsigned int y, unsigned int NI, unsigned int *I, double *f, double *rhoI, double *rhomxx, double *rhomxy, double *rhomxxx, double *rhomxxy){
+
+	double cs = 1.0/as_d;
+	double cs2 = cs*cs;
+
+	double rhoI_local = 0.0, rhomxx_local = 0.0, rhomxy_local = 0.0, rhomxxx_local = 0.0, rhomxxy_local = 0.0;
+	for(int n = 0; n < NI; ++n){
+		unsigned int ni = I[n];
+
+		double ex2 = ex_d[ni]*ex_d[ni];
+		double ey2 = ey_d[ni]*ey_d[ni];
+
+		rhoI_local += f[gpu_fieldn_index(x, y, ni)];
+		rhomxx_local += f[gpu_fieldn_index(x, y, ni)]*(ex2 - cs2);
+		rhomxy_local += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni]*ey_d[ni];
+		rhomxxx_local += f[gpu_fieldn_index(x, y, ni)]*(ex2 - 3*cs2)*ex_d[ni];
+		rhomxxy_local += f[gpu_fieldn_index(x, y, ni)]*(ex2 - cs2)*ey_d[ni];
+	}
+
+	*rhoI = rhoI_local;
+	*rhomxx = rhomxx_local;
+	*rhomxy = rhomxy_local;
+	*rhomxxx = rhomxxx_local;
+	*rhomxxy = rhomxxy_local;
+}
+
+__device__ void known_moments(unsigned int x, unsigned int y, unsigned int NI, unsigned int *I, double *f, double *ax, double *ay, double *axx, double *axy, double *ayy, double *axxx, double *axxy, double *axyy, double *ayyy){
+
+	double cs = 1.0/as_d;
+	double cs2 = cs*cs;
+
+	double ax_local = 0.0, ay_local = 0.0, axx_local = 0.0, axy_local = 0.0, ayy_local = 0.0, axxx_local = 0.0, axxy_local = 0.0, axyy_local = 0.0, ayyy_local = 0.0;
+	for(int n = 0; n < NI; ++n){
+		unsigned int ni = I[n];
+
+		double ex2 = ex_d[ni]*ex_d[ni];
+		double ey2 = ey_d[ni]*ey_d[ni];
+
+		ax_local += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni];
+		ay_local += f[gpu_fieldn_index(x, y, ni)]*ey_d[ni];
+		axx_local += f[gpu_fieldn_index(x, y, ni)]*(ex2 - cs2);
+		axy_local += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni]*ey_d[ni];
+		ayy_local += f[gpu_fieldn_index(x, y, ni)]*(ey2 - cs2);
+		axxx_local += f[gpu_fieldn_index(x, y, ni)]*(ex2 - 3*cs2)*ex_d[ni];
+		axxy_local += f[gpu_fieldn_index(x, y, ni)]*(ex2 - cs2)*ey_d[ni];
+		axyy_local += f[gpu_fieldn_index(x, y, ni)]*(ey2 - cs2)*ex_d[ni];
+		ayyy_local += f[gpu_fieldn_index(x, y, ni)]*(ey2 - 3*cs2)*ey_d[ni];
+	}
+
+	*ax = ax_local;
+	*ay = ay_local;
+	*axx = axx_local;
+	*axy = axy_local;
+	*ayy = ayy_local;
+	*axxx = axxx_local;
+	*axxy = axxy_local;
+	*axyy = axyy_local;
+	*ayyy = ayyy_local;
 }
 
 __device__ void known_moments_pressure(unsigned int x, unsigned int y, unsigned int NI, unsigned int *I, double *f, double *moments){
@@ -171,7 +244,6 @@ __device__ void device_bounce_back(unsigned int x, unsigned int y, double *f){
 
 __device__ void device_inlet_VP(unsigned int x, unsigned int y, double ux_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
 
-	double moments[2];
 	double uy_in = 0.0;
 	double tauxx = 0.0, tauyy = 0.0;
 
@@ -179,20 +251,23 @@ __device__ void device_inlet_VP(unsigned int x, unsigned int y, double ux_in, do
 
 	ux_in = poiseulle_eval(x, y);
 
+	double rhoI = 0, rhomxy = 0;
+	double *prhoI = &rhoI, *prhomxy = &rhomxy;
+
 	if(x == 0){
 		unsigned int NI = 11;
 		unsigned int I[11] = {0, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16};
 
-		known_moments(x, y, NI, I, f, moments);
+		known_moments(x, y, NI, I, f, prhoI, prhomxy);
 
-		double rhoI = moments[0];
-		double rhoaxy = moments[1];
+		double rhoI = *prhoI;
+		double rhomxy = *prhomxy;
 
 		double ux_in2 = ux_in*ux_in;
 		double ux_in3 = ux_in*ux_in*ux_in;
 
 		rho = (129600*rhoI)/(5594.46221994725*ux_in3 - 55552.8525416427*ux_in2 - 64146.5596724039*ux_in + 105937.094743475);
-		tauxy = (-270*rhoaxy)/(245.569775957799*ux_in - 135);
+		tauxy = (-270*rhomxy)/(245.569775957799*ux_in - 135);
 
 		r[gpu_scalar_index(x, y)] = rho;
 		u[gpu_scalar_index(x, y)] = ux_in;
@@ -229,34 +304,31 @@ __device__ void device_inlet_VP(unsigned int x, unsigned int y, double ux_in, do
 
 __device__ void device_inlet_PP(unsigned int x, unsigned int y, double rho_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
 
-	double moments[10];
 	double uy_in = 0.0;
-	double tauxx = 0.0, tauyy = 0.0;
 
-	double a0 = rho_in;
+	//double a0 = rho_in;
+
+	double rhoI = 0, rhomxx = 0, rhomxy = 0, rhomxxx = 0, rhomxxy = 0;
+	double *prhoI = &rhoI, *prhomxx = &rhomxx, *prhomxy = &rhomxy, *prhomxxx = &rhomxxx, *prhomxxy = &rhomxxy;
+
+	//double rhoax = 0, rhoay = 0, rhoaxx = 0, rhoaxy = 0, rhoayy = 0, rhoaxxx = 0, rhoaxxy = 0, rhoaxyy = 0, rhoayyy = 0;
+	//double *pax = &rhoax, *pay = &rhoay, *paxx = &rhoaxx, *paxy = &rhoaxy, *payy = &rhoayy, *paxxx = &rhoaxxx, *paxxy = &rhoaxxy, *paxyy = &rhoaxyy, *payyy = &rhoayyy;
 
 	if(x == 0){
 		unsigned int NI = 11;
 		unsigned int I[11] = {0, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16};
 
-		known_moments_pressure(x, y, NI, I, f, moments);
+		known_moments(x, y, NI, I, f, prhoI, prhomxx, prhomxy, prhomxxx, prhomxxy);
+		//known_moments_pressure(x, y, NI, I, f, pax, pay, paxx, paxy, payy, paxxx, paxxy, paxyy, payyy);
 
-		double rhoI = moments[0];
-		double rhoax = moments[1];
-		double rhoay = moments[2];
-		double rhoaxx = moments[3];
-		double rhoaxy = moments[4];
-		double rhoayy = moments[5];
-		double rhoaxxx = moments[6];
-		double rhoaxxy = moments[7];
-		double rhoaxyy = moments[8];
-		double rhoayyy = moments[9];
+		rhoI = *prhoI, rhomxx = *prhomxx, rhomxy = *prhomxy, rhomxxx = *prhomxxx, rhomxxy = *prhomxxy;
+		//rhoax = *pax, rhoay = *pay, rhoaxx = *paxx, rhoaxy = *paxy, rhoayy = *payy, rhoaxxx = *paxxx, rhoaxxy = *paxxy, rhoaxyy = *paxyy, rhoayyy = *payyy;
 
-		double ux = (1.02853274853573*rho_in - 1.39116351908114*rhoI - 0.148004964936173*rhoaxxx - 0.94084808101913*rhoaxx)/rho_in;
-		double mxx = (0.740268695474152*rho_in - 0.750466883119502*rhoI + 0.384569467507977*rhoaxxx + 1.12216193413231*rhoaxx)/rho_in;
-		double mxy = (2.57129750702885*rhoaxxy + 3.73177207142366*rhoaxy)/rho_in;
-		double mxxx = (0.208023617035681*rho_in - 0.237543794896928*rhoI + 2.12172701123547*rhoaxxx + 0.355195692599559*rhoaxx)/rho_in;
-		double mxxy = (2.82710005410884*rhoaxxy + 1.90405540527407*rhoaxy)/rho_in;
+		double ux = (1.02853274853573*rho_in - 1.39116351908114*rhoI - 0.148004964936173*rhomxxx - 0.94084808101913*rhomxx)/rho_in;
+		double mxx = (0.740268695474152*rho_in - 0.750466883119502*rhoI + 0.384569467507977*rhomxxx + 1.12216193413231*rhomxx)/rho_in;
+		double mxy = (2.57129750702885*rhomxxy + 3.73177207142366*rhomxy)/rho_in;
+		double mxxx = (0.208023617035681*rho_in - 0.237543794896928*rhoI + 2.12172701123547*rhomxxx + 0.355195692599559*rhomxx)/rho_in;
+		double mxxy = (2.82710005410884*rhomxxy + 1.90405540527407*rhomxy)/rho_in;
 /*
 		double ax = 1.02814793526415*a0 + 3.86310277133111*rhoax + 0.34148182105014*rhoay + 2.81424346385289*rhoaxx + 0.947680608482942*rhoaxy - 
 					0.00108282290481611*rhoayy + 0.801956193621391*rhoaxxx + 0.887190633371891*rhoaxxy + 0.0213128039591553*rhoaxyy - 0.0117017934734416*rhoayyy;
@@ -303,7 +375,6 @@ __device__ void device_inlet_PP(unsigned int x, unsigned int y, double rho_in, d
 
 __device__ void device_outlet_VP(unsigned int x, unsigned int y, double ux_out, double *f, double *feq, double *frec, double *r, double *u, double *v, double*txx, double *txy, double *tyy){
 
-	double moments[2];
 	double uy_out = 0.0;
 	double tauxx = 0.0, tauyy = 0.0;
 
@@ -311,20 +382,23 @@ __device__ void device_outlet_VP(unsigned int x, unsigned int y, double ux_out, 
 
 	ux_out = poiseulle_eval(x, y);
 
+	double rhoI = 0, rhomxy = 0;
+	double *prhoI = &rhoI, *prhomxy = &rhomxy;
+
 	if(x == Nx_d-1){
 		unsigned int NI = 11;
 		unsigned int I[11] = {0, 1, 2, 4, 5, 8, 9, 12, 13, 14, 16};
 
-		known_moments(x, y, NI, I, f, moments);
+		known_moments(x, y, NI, I, f, prhoI, prhomxy);
 
-		double rhoI = moments[0];
-		double rhoaxy = moments[1];
+		rhoI = *prhoI;
+		rhomxy = *prhomxy;
 
 		double ux_out2 = ux_out*ux_out;
 		double ux_out3 = ux_out*ux_out*ux_out;
 
 		rho = (-129600*rhoI)/(5594.46221994725*ux_out3 + 55552.8525416427*ux_out2 - 64146.5596724039*ux_out - 105937.094743475);
-		tauxy = (270*rhoaxy)/(245.569775957799*ux_out + 135);
+		tauxy = (270*rhomxy)/(245.569775957799*ux_out + 135);
 
 		r[gpu_scalar_index(x, y)] = rho;
 		u[gpu_scalar_index(x, y)] = ux_out;
@@ -361,36 +435,46 @@ __device__ void device_outlet_VP(unsigned int x, unsigned int y, double ux_out, 
 
 __device__ void device_outlet_PP(unsigned int x, unsigned int y, double rho_out, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
 
-	double moments[10];
 	double uy_out = 0.0;
 
-	double ux, mxx, mxy, mxxx, mxxy;
-	double myy = 0.0, mxyy = 0.0, myyy = 0.0;
+	double rhoI = 0, rhomxx = 0, rhomxy = 0, rhomxxx = 0, rhomxxy = 0;
+	double *prhoI = &rhoI, *prhomxx = &rhomxx, *prhomxy = &rhomxy, *prhomxxx = &rhomxxx, *prhomxxy = &rhomxxy;
+
+	//double rhoax = 0, rhoay = 0, rhoaxx = 0, rhoaxy = 0, rhoayy = 0, rhoaxxx = 0, rhoaxxy = 0, rhoaxyy = 0, rhoayyy = 0;
+	//double *pax = &rhoax, *pay = &rhoay, *paxx = &rhoaxx, *paxy = &rhoaxy, *payy = &rhoayy, *paxxx = &rhoaxxx, *paxxy = &rhoaxxy, *paxyy = &rhoaxyy, *payyy = &rhoayyy;
 
 	if(x == Nx_d-1){
 		unsigned int NI = 11;
 		unsigned int I[11] = {0, 1, 2, 4, 5, 8, 9, 12, 13, 14, 16};
 
-		known_moments_pressure(x, y, NI, I, f, moments);
+		known_moments(x, y, NI, I, f, prhoI, prhomxx, prhomxy, prhomxxx, prhomxxy);
+		//known_moments_pressure(x, y, NI, I, f, pax, pay, paxx, paxy, payy, paxxx, paxxy, paxyy, payyy);
 
-		double rhoI = moments[0];
-		double rhoax = moments[1];
-		double rhoay = moments[2];
-		double rhoaxx = moments[3];
-		double rhoaxy = moments[4];
-		double rhoayy = moments[5];
-		double rhoaxxx = moments[6];
-		double rhoaxxy = moments[7];
-		double rhoaxyy = moments[8];
-		double rhoayyy = moments[9];
+		rhoI = *prhoI, rhomxx = *prhomxx, rhomxy = *prhomxy, rhomxxx = *prhomxxx, rhomxxy = *prhomxxy;
+		//rhoax = *pax, rhoay = *pay, rhoaxx = *paxx, rhoaxy = *paxy, rhoayy = *payy, rhoaxxx = *paxxx, rhoaxxy = *paxxy, rhoaxyy = *paxyy, rhoayyy = *payyy;
 
-		ux = (-1.02853274853573*rho_out + 1.39116351908114*rhoI - 0.148004964936173*rhoaxxx + 0.94084808101913*rhoaxx)/rho_out;
-		mxx = (0.740268695474152*rho_out - 0.750466883119502*rhoI - 0.384569467507977*rhoaxxx + 1.12216193413231*rhoaxx)/rho_out;
-		mxy = (-2.57129750702885*rhoaxxy + 3.73177207142366*rhoaxy)/rho_out;
-		mxxx = (-0.208023617035681*rho_out + 0.237543794896928*rhoI + 2.12172701123547*rhoaxxx - 0.355195692599559*rhoaxx)/rho_out;
-		mxxy = (2.82710005410884*rhoaxxy - 1.90405540527407*rhoaxy)/rho_out;
-
-		double m[10] = {1, ux, uy_out, mxx, mxy, myy, mxxx, mxxy, mxyy, myyy};
+		double ux = (-1.02853274853573*rho_out + 1.39116351908114*rhoI - 0.148004964936173*rhomxxx + 0.94084808101913*rhomxx)/rho_out;
+		double mxx = (0.740268695474152*rho_out - 0.750466883119502*rhoI - 0.384569467507977*rhomxxx + 1.12216193413231*rhomxx)/rho_out;
+		double mxy = (-2.57129750702885*rhomxxy + 3.73177207142366*rhomxy)/rho_out;
+		double mxxx = (-0.208023617035681*rho_out + 0.237543794896928*rhoI + 2.12172701123547*rhomxxx - 0.355195692599559*rhomxx)/rho_out;
+		double mxxy = (2.82710005410884*rhomxxy - 1.90405540527407*rhomxy)/rho_out;
+/*
+		double ax = 1.02814793526415*a0 + 3.86310277133111*rhoax + 0.34148182105014*rhoay + 2.81424346385289*rhoaxx + 0.947680608482942*rhoaxy - 
+					0.00108282290481611*rhoayy + 0.801956193621391*rhoaxxx + 0.887190633371891*rhoaxxy + 0.0213128039591553*rhoaxyy - 0.0117017934734416*rhoayyy;
+		double ay = 23.5259268326181*rhoay + 62.4930443684678*rhoaxy + 58.438961358839*rhoaxxy - 0.800169075943611*rhoayyy;
+		double axx = 0.740057302738619*a0 + 2.08395779347139*rhoax + 0.422847570561152*rhoay + 3.14787430451928*rhoaxx + 1.17348689816811*rhoaxy + 
+					0.00437399173246124*rhoayy + 0.89707319503913*rhoaxxx + 1.09858382151134*rhoaxxy + 0.0263910604326187*rhoaxyy - 0.0144900098231777*rhoayyy;
+		double axy = 23.1381663530851*rhoay + 65.1965244097511*rhoaxy + 60.0473921945547*rhoaxxy - 0.815217391304348*rhoayyy;
+		double ayy = -0.000914866016053683*a0 - 0.000801834404316775*rhoax + 8.72857260928695*rhoay + 0.00437399173246124*rhoaxx + 24.2235413180077*rhoaxy + 
+					1.19237548876429*rhoayy + 0.0107350689459299*rhoaxxx + 22.6773648970578*rhoaxxy + 0.544773822199075*rhoaxyy - 0.299108027706159*rhoayyy;
+		double axxx = 0.207948618703942*a0 + 0.659623941922806*rhoax + 0.210995982053163*rhoay + 0.996429075946035*rhoaxx + 0.585556209243236*rhoaxy + 
+					0.0119240379594034*rhoayy + 2.2840436887333*rhoaxxx + 0.548180451834898*rhoaxxy + 0.0131688298599305*rhoaxyy - 0.0072303450828487*rhoayyy;
+		double axxy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 42.6271193162634*rhoaxxy - 0.549049927727359*rhoayyy;
+		double axyy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 41.6271193162634*rhoaxxy - 0.549049927727359*rhoayyy;
+		double ayyy = -0.658154004267018*rhoay - 1.81101456693753*rhoaxy - 1.64714978318208*rhoaxxy + 1.04347826086957*rhoayyy;
+*/
+		double m[10] = {1, ux, uy_out, mxx, mxy, 0, mxxx, mxxy, 0, 0};
+		//double a[10] = {a0, ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy};
 
 		gpu_recursive_inlet_pressure(x, y, rho_out, m, frec);
 		for(int n = 0; n < q; ++n){
@@ -439,24 +523,26 @@ __device__ void device_outlet_FDP(unsigned int x, unsigned int y, double rho_out
 
 __device__ void device_wall_velocity(unsigned int x, unsigned int y, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
 
-	double moments[2];
 	double ux = 0.0, uy = 0.0;
 	double tauxx = 0.0, tauyy = 0.0;
 
 	double rho, tauxy;
+
+	double rhoI = 0, rhomxy = 0;
+	double *prhoI = &rhoI, *prhomxy = &rhomxy;
 
 	// South wall
 	if(y == 0){
 		unsigned int NI = 11;
 		unsigned int I[11] = {0, 1, 3, 4, 7, 8, 11, 12, 13, 15, 16};
 
-		known_moments(x, y, NI, I, f, moments);
+		known_moments(x, y, NI, I, f, prhoI, prhomxy);
 
-		double rhoI = moments[0];
-		double rhoaxy = moments[1];
+		rhoI = *prhoI;
+		rhomxy = *prhomxy;
 
 		rho = 1.22336751176558*rhoI;
-		tauxy = 2*rhoaxy;
+		tauxy = 2*rhomxy;
 
 		r[gpu_scalar_index(x, y)] = rho;
 		u[gpu_scalar_index(x, y)] = ux;
@@ -495,13 +581,13 @@ __device__ void device_wall_velocity(unsigned int x, unsigned int y, double *f, 
 		unsigned int NI = 11;
 		unsigned int I[11] = {0, 1, 2, 3, 5, 6, 9, 10, 13, 14, 15};
 
-		known_moments(x, y, NI, I, f, moments);
+		known_moments(x, y, NI, I, f, prhoI, prhomxy);
 
-		double rhoI = moments[0];
-		double rhoaxy = moments[1];
+		rhoI = *prhoI;
+		rhomxy = *prhomxy;
 
 		rho = 1.22336751176558*rhoI;
-		tauxy = 2*rhoaxy;
+		tauxy = 2*rhomxy;
 
 		r[gpu_scalar_index(x, y)] = rho;
 		u[gpu_scalar_index(x, y)] = ux;
@@ -533,6 +619,96 @@ __device__ void device_wall_velocity(unsigned int x, unsigned int y, double *f, 
 
 	else if(y == Ny_d-3){
 		f[gpu_fieldn_index(x, y, 16)] = (1.0/6.0)*f[gpu_fieldn_index(x, y+2, 16)] + (4.0/3.0)*f[gpu_fieldn_index(x, y-1, 16)] - (1.0/2.0)*f[gpu_fieldn_index(x, y-2, 16)];
+	}
+}
+
+__device__ void device_corners_first(unsigned int x, unsigned int y, unsigned int NI, unsigned int *I, double *f, double *frec){
+
+	double ux = 0.0, uy = 0.0;
+	double tauxx = 0.0, tauxy = 0.0, tauyy = 0.0;
+
+	double rhoI = 0;
+	double *prhoI = &rhoI;
+	known_moments(x, y, NI, I, f, prhoI);
+
+	rhoI = *prhoI;
+	double rho = 1.4971916997958*rhoI;
+
+	gpu_recursive(x, y, rho, ux, uy, tauxx, tauxy, tauyy, frec);
+
+	for(int n = 0; n < q; ++n){
+		f[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
+	}
+}
+
+__device__ void device_corners_others(unsigned int x, unsigned int y, double *f){
+
+	if(x == 0){
+		x += 1;
+
+		if(y == 0){
+			y += 1;
+
+			f[gpu_fieldn_index(x, y, 9)] = (1.0/3.0)*f[gpu_fieldn_index(x-1, y-1, 9)] + f[gpu_fieldn_index(x+1, y+1, 9)] - (1.0/3.0)*f[gpu_fieldn_index(x+2, y+2, 9)];
+			f[gpu_fieldn_index(x, y, 13)] = 0.5*f[gpu_fieldn_index(x-1, y, 13)] + f[gpu_fieldn_index(x+2, y, 13)] - 0.5*f[gpu_fieldn_index(x+3, y, 13)];
+			f[gpu_fieldn_index(x, y, 14)] = 0.5*f[gpu_fieldn_index(x, y-1, 14)] + f[gpu_fieldn_index(x, y+2, 14)] - 0.5*f[gpu_fieldn_index(x, y+3, 14)];
+			f[gpu_fieldn_index(x, y, 10)] = 0.5*(f[gpu_fieldn_index(x-1, y+1, 10)] + f[gpu_fieldn_index(x+1, y-1, 10)]);
+			f[gpu_fieldn_index(x, y, 12)] = 0.5*(f[gpu_fieldn_index(x-1, y+1, 12)] + f[gpu_fieldn_index(x+1, y-1, 12)]);
+
+			x += 1;
+			y += 1;
+			f[gpu_fieldn_index(x, y, 13)] = (1.0/6.0)*f[gpu_fieldn_index(x-2, y, 13)] + (4.0/3.0)*f[gpu_fieldn_index(x+1, y, 13)] - 0.5*f[gpu_fieldn_index(x+2, y, 13)];
+			f[gpu_fieldn_index(x, y, 14)] = (1.0/6.0)*f[gpu_fieldn_index(x, y-2, 14)] + (4.0/3.0)*f[gpu_fieldn_index(x, y+1, 14)] - 0.5*f[gpu_fieldn_index(x, y+2, 14)];
+		}
+
+		else if(y == Ny_d-1){
+			y -= 1;
+
+			f[gpu_fieldn_index(x, y, 12)] = (1.0/3.0)*f[gpu_fieldn_index(x-1, y+1, 12)] + f[gpu_fieldn_index(x+1, y-1, 12)] - (1.0/3.0)*f[gpu_fieldn_index(x+2, y-2, 12)];
+			f[gpu_fieldn_index(x, y, 13)] = 0.5*f[gpu_fieldn_index(x-1, y, 13)] + f[gpu_fieldn_index(x+2, y, 13)] - 0.5*f[gpu_fieldn_index(x+3, y, 13)];
+			f[gpu_fieldn_index(x, y, 16)] = 0.5*f[gpu_fieldn_index(x, y+1, 16)] + f[gpu_fieldn_index(x, y-2, 16)] - 0.5*f[gpu_fieldn_index(x, y-3, 16)];
+			f[gpu_fieldn_index(x, y, 9)] = 0.5*(f[gpu_fieldn_index(x-1, y-1, 9)] + f[gpu_fieldn_index(x+1, y+1, 9)]);
+			f[gpu_fieldn_index(x, y, 11)] = 0.5*(f[gpu_fieldn_index(x-1, y-1, 11)] + f[gpu_fieldn_index(x+1, y+1, 11)]);
+
+			x += 1;
+			y -= 1;
+			f[gpu_fieldn_index(x, y, 13)] = (1.0/6.0)*f[gpu_fieldn_index(x-2, y, 13)] + (4.0/3.0)*f[gpu_fieldn_index(x+1, y, 13)] - 0.5*f[gpu_fieldn_index(x+2, y, 13)];
+			f[gpu_fieldn_index(x, y, 14)] = (1.0/6.0)*f[gpu_fieldn_index(x, y+2, 14)] + (4.0/3.0)*f[gpu_fieldn_index(x, y-1, 14)] - 0.5*f[gpu_fieldn_index(x, y-2, 14)];
+		}
+	}
+
+	if(x == Nx_d-1){
+		x -= 1;
+
+		if(y == 0){
+			y+= 1;
+
+			f[gpu_fieldn_index(x, y, 10)] = (1.0/3.0)*f[gpu_fieldn_index(x+1, y-1, 10)] + f[gpu_fieldn_index(x-1, y+1, 10)] - (1.0/3.0)*f[gpu_fieldn_index(x-2, y+2, 10)];
+			f[gpu_fieldn_index(x, y, 14)] = 0.5*f[gpu_fieldn_index(x, y-1, 14)] + f[gpu_fieldn_index(x, y+2, 14)] - 0.5*f[gpu_fieldn_index(x, y+3, 14)];
+			f[gpu_fieldn_index(x, y, 15)] = 0.5*f[gpu_fieldn_index(x+1, y, 15)] + f[gpu_fieldn_index(x-2, y, 15)] - 0.5*f[gpu_fieldn_index(x-3, y, 15)];
+			f[gpu_fieldn_index(x, y, 9)] = 0.5*(f[gpu_fieldn_index(x-1, y-1, 9)] + f[gpu_fieldn_index(x+1, y+1, 9)]);
+			f[gpu_fieldn_index(x, y, 11)] = 0.5*(f[gpu_fieldn_index(x-1, y-1, 11)] + f[gpu_fieldn_index(x+1, y+1, 11)]);
+
+			x -= 1;
+			y += 1;
+			f[gpu_fieldn_index(x, y, 14)] = (1.0/6.0)*f[gpu_fieldn_index(x, y-2, 14)] + (4.0/3.0)*f[gpu_fieldn_index(x, y+1, 14)] - 0.5*f[gpu_fieldn_index(x, y+2, 14)];
+			f[gpu_fieldn_index(x, y, 15)] = (1.0/6.0)*f[gpu_fieldn_index(x+2, y, 15)] + (4.0/3.0)*f[gpu_fieldn_index(x-1, y, 15)] - 0.5*f[gpu_fieldn_index(x-2, y, 15)];
+		}
+
+		else if(y == Ny_d-1){
+			y -= 1;
+
+			f[gpu_fieldn_index(x, y, 11)] = (1.0/3.0)*f[gpu_fieldn_index(x+1, y+1, 11)] + f[gpu_fieldn_index(x-1, y-1, 11)] - (1.0/3.0)*f[gpu_fieldn_index(x-2, y-2, 11)];
+			f[gpu_fieldn_index(x, y, 15)] = 0.5*f[gpu_fieldn_index(x+1, y, 15)] + f[gpu_fieldn_index(x-2, y, 15)] - 0.5*f[gpu_fieldn_index(x-3, y, 15)];
+			f[gpu_fieldn_index(x, y, 16)] = 0.5*f[gpu_fieldn_index(x, y+1, 16)] + f[gpu_fieldn_index(x, y-2, 16)] - 0.5*f[gpu_fieldn_index(x, y-3, 16)];
+			f[gpu_fieldn_index(x, y, 10)] = 0.5*(f[gpu_fieldn_index(x-1, y+1, 10)] + f[gpu_fieldn_index(x+1, y-1, 10)]);
+			f[gpu_fieldn_index(x, y, 12)] = 0.5*(f[gpu_fieldn_index(x-1, y+1, 12)] + f[gpu_fieldn_index(x+1, y-1, 12)]);
+
+			x -= 1;
+			y -= 1;
+			f[gpu_fieldn_index(x, y, 15)] = (1.0/6.0)*f[gpu_fieldn_index(x+2, y, 15)] + (4.0/3.0)*f[gpu_fieldn_index(x-1, y, 15)] - 0.5*f[gpu_fieldn_index(x-2, y, 15)];
+			f[gpu_fieldn_index(x, y, 16)] = (1.0/6.0)*f[gpu_fieldn_index(x, y+2, 16)] + (4.0/3.0)*f[gpu_fieldn_index(x, y-1, 16)] - 0.5*f[gpu_fieldn_index(x, y-2, 16)];
+		}
 	}
 }
 
@@ -661,4 +837,66 @@ __global__ void gpu_wall_velocity(double *f, double *feq, double *frec, double *
 
 	__syncthreads();
 	att_moments(x, y, f, r, u, v, txx, txy, tyy);
+}
+
+__host__ void corners(double *f, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
+
+	dim3 grid(1, 1, 1);
+	dim3 block(1, 1, 1);
+
+	gpu_corners<<< grid, block >>>(f, frec, r, u, v, txx, txy, tyy);
+	getLastCudaError("gpu_corners kernel error");
+}
+
+__global__ void gpu_corners(double *f, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
+
+	unsigned int NI, I[7], x, y;
+	// Southwest
+	NI = 7;
+	I[0] = 0, I[1] = 3, I[2] = 4, I[3] = 7, I[4] = 11, I[5] = 15, I[6] = 16;
+
+	x = 0, y = 0;
+
+	device_corners_first(x, y, NI, I, f, frec);
+	__syncthreads();
+	device_corners_others(x, y, f);
+
+	att_moments(x, y, f, r, u, v, txx, txy, tyy);
+
+	// Northwest
+	NI = 7;
+	I[0] = 0, I[1] = 2, I[2] = 3, I[3] = 6, I[4] = 10, I[5] = 14, I[6] = 15;
+
+	x = 0, y = Ny_d-1;
+
+	device_corners_first(x, y, NI, I, f, frec);
+	__syncthreads();
+	device_corners_others(x, y, f);
+
+	att_moments(x, y, f, r, u, v, txx, txy, tyy);
+
+	// Southeast
+	NI = 7;
+	I[0] = 0, I[1] = 1, I[2] = 4, I[3] = 8, I[4] = 12, I[5] = 13, I[6] = 16;
+
+	x = Nx_d-1, y = 0;
+
+	device_corners_first(x, y, NI, I, f, frec);
+	__syncthreads();
+	device_corners_others(x, y, f);
+
+	att_moments(x, y, f, r, u, v, txx, txy, tyy);
+
+	// Northeast
+	NI = 7;
+	I[0] = 0, I[1] = 1, I[2] = 2, I[3] = 5, I[4] = 9, I[5] = 13, I[6] = 14;
+
+	x = Nx_d-1, y = Ny_d-1;
+
+	device_corners_first(x, y, NI, I, f, frec);
+	__syncthreads();
+	device_corners_others(x, y, f);
+
+	att_moments(x, y, f, r, u, v, txx, txy, tyy);
+
 }
