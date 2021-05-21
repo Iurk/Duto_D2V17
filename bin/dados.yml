@@ -1,6 +1,6 @@
 domain:
-  Nx: 256
-  Ny: 128
+  Nx: 1024
+  Ny: 64
 
 simulation:
   lattice: D2V17
@@ -14,7 +14,7 @@ gpu:
   nThreads: 32
 
 input:
-  Re: 100
+  Re: 1
   u_max: 0.04
   rho0: 1.0
 
