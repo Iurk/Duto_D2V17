@@ -41,7 +41,7 @@ __device__ void gpu_recursive_inlet_pressure(unsigned int x, unsigned int y, dou
 		double order_2 = B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]);
 		double order_3 = C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]);
 
-		frec[gpu_fieldn_index(x, y, n)] = rho*W[n]*(a[0]*H[0] + order_1 + order_2 + order_3);
+		frec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + order_1 + order_2 + order_3);
 	}
 }
 
@@ -98,19 +98,20 @@ __device__ void known_moments(unsigned int x, unsigned int y, unsigned int NI, u
 	*rhomxxy = rhomxxy_local;
 }
 
-__device__ void known_moments(unsigned int x, unsigned int y, unsigned int NI, unsigned int *I, double *f, double *ax, double *ay, double *axx, double *axy, double *ayy, double *axxx, double *axxy, double *axyy, double *ayyy){
+__device__ void known_moments(unsigned int x, unsigned int y, unsigned int NI, unsigned int *I, double *f, double *a0, double *ay, double *axx, double *axy, double *ayy, double *axxx, double *axxy, double *axyy, double *ayyy){
 
 	double cs = 1.0/as_d;
 	double cs2 = cs*cs;
 
-	double ax_local = 0.0, ay_local = 0.0, axx_local = 0.0, axy_local = 0.0, ayy_local = 0.0, axxx_local = 0.0, axxy_local = 0.0, axyy_local = 0.0, ayyy_local = 0.0;
+	double a0_local = 0.0, ay_local = 0.0, axx_local = 0.0, axy_local = 0.0, ayy_local = 0.0, axxx_local = 0.0, axxy_local = 0.0, axyy_local = 0.0, ayyy_local = 0.0;
 	for(int n = 0; n < NI; ++n){
 		unsigned int ni = I[n];
 
 		double ex2 = ex_d[ni]*ex_d[ni];
 		double ey2 = ey_d[ni]*ey_d[ni];
 
-		ax_local += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni];
+		a0_local += f[gpu_fieldn_index(x, y, ni)];
+		//ax_local += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni];
 		ay_local += f[gpu_fieldn_index(x, y, ni)]*ey_d[ni];
 		axx_local += f[gpu_fieldn_index(x, y, ni)]*(ex2 - cs2);
 		axy_local += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni]*ey_d[ni];
@@ -121,7 +122,7 @@ __device__ void known_moments(unsigned int x, unsigned int y, unsigned int NI, u
 		ayyy_local += f[gpu_fieldn_index(x, y, ni)]*(ey2 - 3*cs2)*ey_d[ni];
 	}
 
-	*ax = ax_local;
+	*a0 = a0_local;
 	*ay = ay_local;
 	*axx = axx_local;
 	*axy = axy_local;
@@ -130,42 +131,6 @@ __device__ void known_moments(unsigned int x, unsigned int y, unsigned int NI, u
 	*axxy = axxy_local;
 	*axyy = axyy_local;
 	*ayyy = ayyy_local;
-}
-
-__device__ void known_moments_pressure(unsigned int x, unsigned int y, unsigned int NI, unsigned int *I, double *f, double *moments){
-
-	double cs = 1.0/as_d;
-	double cs2 = cs*cs;
-
-	double rhoI = 0.0, rhoax = 0.0, rhoay = 0.0, rhoaxx = 0.0, rhoaxy = 0.0, rhoayy = 0.0, rhoaxxx = 0.0, rhoaxxy = 0.0, rhoaxyy = 0.0, rhoayyy = 0.0;
-	for(int n = 0; n < NI; ++n){
-		unsigned int ni = I[n];
-
-		double ex2 = ex_d[ni]*ex_d[ni];
-		double ey2 = ey_d[ni]*ey_d[ni];
-
-		rhoI += f[gpu_fieldn_index(x, y, ni)];
-		rhoax += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni];
-		rhoay += f[gpu_fieldn_index(x, y, ni)]*ey_d[ni];
-		rhoaxx += f[gpu_fieldn_index(x, y, ni)]*(ex2 - cs2);
-		rhoaxy += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni]*ey_d[ni];
-		rhoayy += f[gpu_fieldn_index(x, y, ni)]*(ey2 - cs2);
-		rhoaxxx += f[gpu_fieldn_index(x, y, ni)]*(ex2 - 3*cs2)*ex_d[ni];
-		rhoaxxy += f[gpu_fieldn_index(x, y, ni)]*(ex2 - cs2)*ey_d[ni];
-		rhoaxyy += f[gpu_fieldn_index(x, y, ni)]*(ey2 - cs2)*ex_d[ni];
-		rhoayyy += f[gpu_fieldn_index(x, y, ni)]*(ey2 - 3*cs2)*ey_d[ni];
-	}
-
-	moments[0] = rhoI;
-	moments[1] = rhoax;
-	moments[2] = rhoay;
-	moments[3] = rhoaxx;
-	moments[4] = rhoaxy;
-	moments[5] = rhoayy;
-	moments[6] = rhoaxxx;
-	moments[7] = rhoaxxy;
-	moments[8] = rhoaxyy;
-	moments[9] = rhoayyy;
 }
 
 __device__ void att_moments(unsigned int x, unsigned int y, double *f, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
@@ -305,49 +270,48 @@ __device__ void device_inlet_VP(unsigned int x, unsigned int y, double ux_in, do
 __device__ void device_inlet_PP(unsigned int x, unsigned int y, double rho_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
 
 	double uy_in = 0.0;
+	double a0 = rho_in;
 
-	//double a0 = rho_in;
+	double ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy;
 
-	double rhoI = 0, rhomxx = 0, rhomxy = 0, rhomxxx = 0, rhomxxy = 0;
-	double *prhoI = &rhoI, *prhomxx = &rhomxx, *prhomxy = &rhomxy, *prhomxxx = &rhomxxx, *prhomxxy = &rhomxxy;
+	//double rhoI = 0, rhomxx = 0, rhomxy = 0, rhomxxx = 0, rhomxxy = 0;
+	//double *prhoI = &rhoI, *prhomxx = &rhomxx, *prhomxy = &rhomxy, *prhomxxx = &rhomxxx, *prhomxxy = &rhomxxy;
 
-	//double rhoax = 0, rhoay = 0, rhoaxx = 0, rhoaxy = 0, rhoayy = 0, rhoaxxx = 0, rhoaxxy = 0, rhoaxyy = 0, rhoayyy = 0;
-	//double *pax = &rhoax, *pay = &rhoay, *paxx = &rhoaxx, *paxy = &rhoaxy, *payy = &rhoayy, *paxxx = &rhoaxxx, *paxxy = &rhoaxxy, *paxyy = &rhoaxyy, *payyy = &rhoayyy;
+	double rhoI = 0, rhoay = 0, rhoaxx = 0, rhoaxy = 0, rhoayy = 0, rhoaxxx = 0, rhoaxxy = 0, rhoaxyy = 0, rhoayyy = 0;
+	double *prhoI = &rhoI, *prhoay = &rhoay, *prhoaxx = &rhoaxx, *prhoaxy = &rhoaxy, *prhoayy = &rhoayy, *prhoaxxx = &rhoaxxx, *prhoaxxy = &rhoaxxy, *prhoaxyy = &rhoaxyy, *prhoayyy = &rhoayyy;
 
 	if(x == 0){
 		unsigned int NI = 11;
 		unsigned int I[11] = {0, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16};
 
-		known_moments(x, y, NI, I, f, prhoI, prhomxx, prhomxy, prhomxxx, prhomxxy);
-		//known_moments_pressure(x, y, NI, I, f, pax, pay, paxx, paxy, payy, paxxx, paxxy, paxyy, payyy);
+		//known_moments(x, y, NI, I, f, prhoI, prhomxx, prhomxy, prhomxxx, prhomxxy);
+		known_moments(x, y, NI, I, f, prhoI, prhoay, prhoaxx, prhoaxy, prhoayy, prhoaxxx, prhoaxxy, prhoaxyy, prhoayyy);
 
-		rhoI = *prhoI, rhomxx = *prhomxx, rhomxy = *prhomxy, rhomxxx = *prhomxxx, rhomxxy = *prhomxxy;
-		//rhoax = *pax, rhoay = *pay, rhoaxx = *paxx, rhoaxy = *paxy, rhoayy = *payy, rhoaxxx = *paxxx, rhoaxxy = *paxxy, rhoaxyy = *paxyy, rhoayyy = *payyy;
+		//rhoI = *prhoI, rhomxx = *prhomxx, rhomxy = *prhomxy, rhomxxx = *prhomxxx, rhomxxy = *prhomxxy;
 
+		rhoI = *prhoI, rhoay = *prhoay, rhoaxx = *prhoaxx, rhoaxy = *prhoaxy, rhoayy = *prhoayy, rhoaxxx = *prhoaxxx, rhoaxxy = *prhoaxxy, rhoaxyy = *prhoaxyy, rhoayyy = *prhoayyy;
+/*
 		double ux = (1.02853274853573*rho_in - 1.39116351908114*rhoI - 0.148004964936173*rhomxxx - 0.94084808101913*rhomxx)/rho_in;
 		double mxx = (0.740268695474152*rho_in - 0.750466883119502*rhoI + 0.384569467507977*rhomxxx + 1.12216193413231*rhomxx)/rho_in;
 		double mxy = (2.57129750702885*rhomxxy + 3.73177207142366*rhomxy)/rho_in;
 		double mxxx = (0.208023617035681*rho_in - 0.237543794896928*rhoI + 2.12172701123547*rhomxxx + 0.355195692599559*rhomxx)/rho_in;
 		double mxxy = (2.82710005410884*rhomxxy + 1.90405540527407*rhomxy)/rho_in;
-/*
-		double ax = 1.02814793526415*a0 + 3.86310277133111*rhoax + 0.34148182105014*rhoay + 2.81424346385289*rhoaxx + 0.947680608482942*rhoaxy - 
-					0.00108282290481611*rhoayy + 0.801956193621391*rhoaxxx + 0.887190633371891*rhoaxxy + 0.0213128039591553*rhoaxyy - 0.0117017934734416*rhoayyy;
-		double ay = 23.5259268326181*rhoay + 62.4930443684678*rhoaxy + 58.438961358839*rhoaxxy - 0.800169075943611*rhoayyy;
-		double axx = 0.740057302738619*a0 + 2.08395779347139*rhoax + 0.422847570561152*rhoay + 3.14787430451928*rhoaxx + 1.17348689816811*rhoaxy + 
-					0.00437399173246124*rhoayy + 0.89707319503913*rhoaxxx + 1.09858382151134*rhoaxxy + 0.0263910604326187*rhoaxyy - 0.0144900098231777*rhoayyy;
-		double axy = 23.1381663530851*rhoay + 65.1965244097511*rhoaxy + 60.0473921945547*rhoaxxy - 0.815217391304348*rhoayyy;
-		double ayy = -0.000914866016053683*a0 - 0.000801834404316775*rhoax + 8.72857260928695*rhoay + 0.00437399173246124*rhoaxx + 24.2235413180077*rhoaxy + 
-					1.19237548876429*rhoayy + 0.0107350689459299*rhoaxxx + 22.6773648970578*rhoaxxy + 0.544773822199075*rhoaxyy - 0.299108027706159*rhoayyy;
-		double axxx = 0.207948618703942*a0 + 0.659623941922806*rhoax + 0.210995982053163*rhoay + 0.996429075946035*rhoaxx + 0.585556209243236*rhoaxy + 
-					0.0119240379594034*rhoayy + 2.2840436887333*rhoaxxx + 0.548180451834898*rhoaxxy + 0.0131688298599305*rhoaxyy - 0.0072303450828487*rhoayyy;
-		double axxy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 42.6271193162634*rhoaxxy - 0.549049927727359*rhoayyy;
-		double axyy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 41.6271193162634*rhoaxxy - 0.549049927727359*rhoayyy;
-		double ayyy = -0.658154004267018*rhoay - 1.81101456693753*rhoaxy - 1.64714978318208*rhoaxxy + 1.04347826086957*rhoayyy;
 */
-		double m[10] = {1, ux, uy_in, mxx, mxy, 0, mxxx, mxxy, 0, 0};
-		//double a[10] = {a0, ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy};
+		ax = 1.02853001742339*a0 - 1.3911626571536*rhoI + 0.0352938882748483*rhoay - 0.940832698105446*rhoaxx + 0.0979476254787982*rhoaxy + 0.00355923867008645*rhoayy - 0.147972332198398*rhoaxxx + 0.0916956779614975*rhoaxxy + 0.002202787016436*rhoaxyy - 0.00120944005217295*rhoayyy;
+		ay = 23.5259268326181*rhoay + 62.4930443684678*rhoaxy + 58.438961358839*rhoaxxy - 0.800169075943611*rhoayyy;
+		axx = 0.740263417652105*a0 - 0.750465217461107*rhoI + 0.257673935132836*rhoay + 1.12219166131709*rhoaxx + 0.715096899992883*rhoaxy + 0.00687816026470532*rhoayy + 0.384632529646006*rhoaxxx + 0.669452625650493*rhoaxxy + 0.0160821271480331*rhoaxyy - 0.00882989074832976*rhoayyy;
+		axy = 23.1381663530851*rhoay + 65.1965244097511*rhoaxy + 60.0473921945547*rhoaxxy - 0.815217391304348*rhoayyy;
+		ayy =  - 0.000914945321896342*a0 + 0.000288752887648945*rhoI + 8.72863616235121*rhoay + 0.0051534038878491*rhoaxx + 24.2237176905198*rhoaxy + 1.19237452524743*rhoayy + 0.010932238272953*rhoaxxx + 22.6775300118014*rhoaxxy + 0.54477778871769*rhoaxyy - 0.299110205522918*rhoayyy;
+		axxx = 0.208013859147942*a0 - 0.237540715348681*rhoI + 0.158714460400339*rhoay + 0.355250653628826*rhoaxx + 0.440464490744149*rhoaxy + 0.0127166689443748*rhoayy + 2.12184360350744*rhoaxxx + 0.41234986452523*rhoaxxy + 0.00990579870282131*rhoaxyy - 0.0054387780618658*rhoayyy;
+		axxy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 42.6271193162634*rhoaxxy - 0.549049927727359*rhoayyy;
+		axyy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 41.6271193162634*rhoaxxy + 1.0*rhoaxyy - 0.549049927727359*rhoayyy;
+		ayyy = - 0.658154004267018*rhoay - 1.81101456693753*rhoaxy- 1.64714978318208*rhoaxxy + 1.04347826086957*rhoayyy;
 
-		gpu_recursive_inlet_pressure(x, y, rho_in, m, frec);
+		//double m[10] = {1, ux, uy_in, mxx, mxy, 0, mxxx, mxxy, 0, 0};
+		double a[10] = {a0, ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy};
+
+		//gpu_recursive_inlet_pressure(x, y, rho_in, m, frec);
+		gpu_recursive_inlet_pressure(x, y, rho_in, a, frec);
 		for(int n = 0; n < q; ++n){
 			f[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
 		}
@@ -436,47 +400,50 @@ __device__ void device_outlet_VP(unsigned int x, unsigned int y, double ux_out, 
 __device__ void device_outlet_PP(unsigned int x, unsigned int y, double rho_out, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
 
 	double uy_out = 0.0;
+	double a0 = rho_out;
 
-	double rhoI = 0, rhomxx = 0, rhomxy = 0, rhomxxx = 0, rhomxxy = 0;
-	double *prhoI = &rhoI, *prhomxx = &rhomxx, *prhomxy = &rhomxy, *prhomxxx = &rhomxxx, *prhomxxy = &rhomxxy;
+	double ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy;
 
-	//double rhoax = 0, rhoay = 0, rhoaxx = 0, rhoaxy = 0, rhoayy = 0, rhoaxxx = 0, rhoaxxy = 0, rhoaxyy = 0, rhoayyy = 0;
-	//double *pax = &rhoax, *pay = &rhoay, *paxx = &rhoaxx, *paxy = &rhoaxy, *payy = &rhoayy, *paxxx = &rhoaxxx, *paxxy = &rhoaxxy, *paxyy = &rhoaxyy, *payyy = &rhoayyy;
+	//double rhoI = 0, rhomxx = 0, rhomxy = 0, rhomxxx = 0, rhomxxy = 0;
+	//double *prhoI = &rhoI, *prhomxx = &rhomxx, *prhomxy = &rhomxy, *prhomxxx = &rhomxxx, *prhomxxy = &rhomxxy;
+
+	double rhoI = 0, rhoay = 0, rhoaxx = 0, rhoaxy = 0, rhoayy = 0, rhoaxxx = 0, rhoaxxy = 0, rhoaxyy = 0, rhoayyy = 0;
+	double *prhoI = &rhoI, *prhoay = &rhoay, *prhoaxx = &rhoaxx, *prhoaxy = &rhoaxy, *prhoayy = &rhoayy, *prhoaxxx = &rhoaxxx, *prhoaxxy = &rhoaxxy, *prhoaxyy = &rhoaxyy, *prhoayyy = &rhoayyy;
 
 	if(x == Nx_d-1){
 		unsigned int NI = 11;
 		unsigned int I[11] = {0, 1, 2, 4, 5, 8, 9, 12, 13, 14, 16};
 
-		known_moments(x, y, NI, I, f, prhoI, prhomxx, prhomxy, prhomxxx, prhomxxy);
-		//known_moments_pressure(x, y, NI, I, f, pax, pay, paxx, paxy, payy, paxxx, paxxy, paxyy, payyy);
+		//known_moments(x, y, NI, I, f, prhoI, prhomxx, prhomxy, prhomxxx, prhomxxy);
+		known_moments(x, y, NI, I, f, prhoI, prhoay, prhoaxx, prhoaxy, prhoayy, prhoaxxx, prhoaxxy, prhoaxyy, prhoayyy);
 
-		rhoI = *prhoI, rhomxx = *prhomxx, rhomxy = *prhomxy, rhomxxx = *prhomxxx, rhomxxy = *prhomxxy;
-		//rhoax = *pax, rhoay = *pay, rhoaxx = *paxx, rhoaxy = *paxy, rhoayy = *payy, rhoaxxx = *paxxx, rhoaxxy = *paxxy, rhoaxyy = *paxyy, rhoayyy = *payyy;
-
+		//rhoI = *prhoI, rhomxx = *prhomxx, rhomxy = *prhomxy, rhomxxx = *prhomxxx, rhomxxy = *prhomxxy;
+		rhoI = *prhoI, rhoay = *prhoay, rhoaxx = *prhoaxx, rhoaxy = *prhoaxy, rhoayy = *prhoayy, rhoaxxx = *prhoaxxx, rhoaxxy = *prhoaxxy, rhoaxyy = *prhoaxyy, rhoayyy = *prhoayyy;
+/*
 		double ux = (-1.02853274853573*rho_out + 1.39116351908114*rhoI - 0.148004964936173*rhomxxx + 0.94084808101913*rhomxx)/rho_out;
 		double mxx = (0.740268695474152*rho_out - 0.750466883119502*rhoI - 0.384569467507977*rhomxxx + 1.12216193413231*rhomxx)/rho_out;
 		double mxy = (-2.57129750702885*rhomxxy + 3.73177207142366*rhomxy)/rho_out;
 		double mxxx = (-0.208023617035681*rho_out + 0.237543794896928*rhoI + 2.12172701123547*rhomxxx - 0.355195692599559*rhomxx)/rho_out;
 		double mxxy = (2.82710005410884*rhomxxy - 1.90405540527407*rhomxy)/rho_out;
-/*
-		double ax = 1.02814793526415*a0 + 3.86310277133111*rhoax + 0.34148182105014*rhoay + 2.81424346385289*rhoaxx + 0.947680608482942*rhoaxy - 
-					0.00108282290481611*rhoayy + 0.801956193621391*rhoaxxx + 0.887190633371891*rhoaxxy + 0.0213128039591553*rhoaxyy - 0.0117017934734416*rhoayyy;
-		double ay = 23.5259268326181*rhoay + 62.4930443684678*rhoaxy + 58.438961358839*rhoaxxy - 0.800169075943611*rhoayyy;
-		double axx = 0.740057302738619*a0 + 2.08395779347139*rhoax + 0.422847570561152*rhoay + 3.14787430451928*rhoaxx + 1.17348689816811*rhoaxy + 
-					0.00437399173246124*rhoayy + 0.89707319503913*rhoaxxx + 1.09858382151134*rhoaxxy + 0.0263910604326187*rhoaxyy - 0.0144900098231777*rhoayyy;
-		double axy = 23.1381663530851*rhoay + 65.1965244097511*rhoaxy + 60.0473921945547*rhoaxxy - 0.815217391304348*rhoayyy;
-		double ayy = -0.000914866016053683*a0 - 0.000801834404316775*rhoax + 8.72857260928695*rhoay + 0.00437399173246124*rhoaxx + 24.2235413180077*rhoaxy + 
-					1.19237548876429*rhoayy + 0.0107350689459299*rhoaxxx + 22.6773648970578*rhoaxxy + 0.544773822199075*rhoaxyy - 0.299108027706159*rhoayyy;
-		double axxx = 0.207948618703942*a0 + 0.659623941922806*rhoax + 0.210995982053163*rhoay + 0.996429075946035*rhoaxx + 0.585556209243236*rhoaxy + 
-					0.0119240379594034*rhoayy + 2.2840436887333*rhoaxxx + 0.548180451834898*rhoaxxy + 0.0131688298599305*rhoaxyy - 0.0072303450828487*rhoayyy;
-		double axxy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 42.6271193162634*rhoaxxy - 0.549049927727359*rhoayyy;
-		double axyy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 41.6271193162634*rhoaxxy - 0.549049927727359*rhoayyy;
-		double ayyy = -0.658154004267018*rhoay - 1.81101456693753*rhoaxy - 1.64714978318208*rhoaxxy + 1.04347826086957*rhoayyy;
 */
-		double m[10] = {1, ux, uy_out, mxx, mxy, 0, mxxx, mxxy, 0, 0};
-		//double a[10] = {a0, ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy};
 
-		gpu_recursive_inlet_pressure(x, y, rho_out, m, frec);
+		
+
+		ax = 1.02853001742339*a0 - 1.3911626571536*rhoI + 0.0352938882748483*rhoay - 0.940832698105446*rhoaxx + 0.0979476254787982*rhoaxy + 0.00355923867008645*rhoayy - 0.147972332198398*rhoaxxx + 0.0916956779614975*rhoaxxy + 0.002202787016436*rhoaxyy - 0.00120944005217295*rhoayyy;
+		ay = 23.5259268326181*rhoay + 62.4930443684678*rhoaxy + 58.438961358839*rhoaxxy - 0.800169075943611*rhoayyy;
+		axx = 0.740263417652105*a0 - 0.750465217461107*rhoI + 0.257673935132836*rhoay + 1.12219166131709*rhoaxx + 0.715096899992883*rhoaxy + 0.00687816026470532*rhoayy + 0.384632529646006*rhoaxxx + 0.669452625650493*rhoaxxy + 0.0160821271480331*rhoaxyy - 0.00882989074832976*rhoayyy;
+		axy = 23.1381663530851*rhoay + 65.1965244097511*rhoaxy + 60.0473921945547*rhoaxxy - 0.815217391304348*rhoayyy;
+		ayy = - 0.000914945321896342*a0 + 0.000288752887648945*rhoI + 8.72863616235121*rhoay + 0.0051534038878491*rhoaxx + 24.2237176905198*rhoaxy + 1.19237452524743*rhoayy + 0.010932238272953*rhoaxxx + 22.6775300118014*rhoaxxy + 0.54477778871769*rhoaxyy - 0.299110205522918*rhoayyy;
+		axxx = 0.208013859147942*a0 - 0.237540715348681*rhoI + 0.158714460400339*rhoay + 0.355250653628826*rhoaxx + 0.440464490744149*rhoaxy + 0.0127166689443748*rhoayy + 2.12184360350744*rhoaxxx + 0.41234986452523*rhoaxxy + 0.00990579870282131*rhoaxyy - 0.0054387780618658*rhoayyy;
+		axxy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 42.6271193162634*rhoaxxy - 0.549049927727359*rhoayyy;
+		axyy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 41.6271193162634*rhoaxxy + 1.0*rhoaxyy - 0.549049927727359*rhoayyy;
+		ayyy = - 0.658154004267018*rhoay - 1.81101456693753*rhoaxy - 1.64714978318208*rhoaxxy + 1.04347826086957*rhoayyy;
+
+		//double m[10] = {1, ux, uy_out, mxx, mxy, 0, mxxx, mxxy, 0, 0};
+		double a[10] = {a0, ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy};
+
+		//gpu_recursive_inlet_pressure(x, y, rho_out, m, frec);
+		gpu_recursive_inlet_pressure(x, y, rho_out, a, frec);
 		for(int n = 0; n < q; ++n){
 			f[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
 		}
