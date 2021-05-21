@@ -50,7 +50,7 @@ int main(int argc, char const *argv[]){
 	printf("\n");
 
 	// Declaration and Allocation in device Memory
-	double *f1_gpu, *f2_gpu, *feq_gpu, *frec_gpu, *S_gpu;
+	double *f1_gpu, *f2_gpu, *feq_gpu, *fneq_gpu, *frec_gpu, *S_gpu;
 	double *rho_gpu, *ux_gpu, *uy_gpu, *ux_old_gpu;
 	double *txx_gpu, *txy_gpu, *tyy_gpu;
 	double *prop_gpu, *conv_gpu;
@@ -58,6 +58,7 @@ int main(int argc, char const *argv[]){
 	checkCudaErrors(cudaMalloc((void**)&f1_gpu, mem_size_ndir));
 	checkCudaErrors(cudaMalloc((void**)&f2_gpu, mem_size_ndir));
 	checkCudaErrors(cudaMalloc((void**)&feq_gpu, mem_size_ndir));
+	checkCudaErrors(cudaMalloc((void**)&fneq_gpu, mem_size_ndir));
 	checkCudaErrors(cudaMalloc((void**)&frec_gpu, mem_size_ndir));
 	checkCudaErrors(cudaMalloc((void**)&S_gpu, mem_size_ndir));
 	checkCudaErrors(cudaMalloc((void**)&rho_gpu, mem_size_scalar));
@@ -155,12 +156,12 @@ int main(int argc, char const *argv[]){
 			std::cout << std::endl;
 		}
 */
-		stream_collide_save(f1_gpu, f2_gpu, feq_gpu, frec_gpu, S_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, need_scalars);
-		inlet_BC(0, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, "VP");
-		outlet_BC(0, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, "VP");
+		stream_collide_save(f1_gpu, f2_gpu, feq_gpu, fneq_gpu, frec_gpu, S_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, need_scalars);
+		inlet_BC(1.05, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, "PP");
+		outlet_BC(1.0, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, "PP");
 		//bounce_back(f2_gpu);
 		wall_velocity(f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu);
-		corners(f2_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu);
+		//corners(f2_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu);
 
 		if(save){
 			save_scalar("rho",rho_gpu, scalar_host, n+1);
@@ -228,6 +229,7 @@ int main(int argc, char const *argv[]){
 	checkCudaErrors(cudaFree(f1_gpu));
 	checkCudaErrors(cudaFree(f2_gpu));
 	checkCudaErrors(cudaFree(feq_gpu));
+	checkCudaErrors(cudaFree(fneq_gpu));
 	checkCudaErrors(cudaFree(frec_gpu));
 	checkCudaErrors(cudaFree(S_gpu));
 	checkCudaErrors(cudaFree(rho_gpu));
