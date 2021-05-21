@@ -33,7 +33,7 @@ __device__ __forceinline__ size_t gpu_fieldn_index(unsigned int x, unsigned int 
 }
 
 __global__ void gpu_init_equilibrium(double*, double*, double*, double*);
-__global__ void gpu_stream_collide_save(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, bool);
+__global__ void gpu_stream_collide_save(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, bool);
 __global__ void gpu_compute_convergence(double*, double*, double*);
 __global__ void gpu_compute_flow_properties(unsigned int, double*, double*, double*, double*);
 __global__ void gpu_print_mesh(int);
@@ -122,6 +122,35 @@ __device__ void gpu_equilibrium(unsigned int x, unsigned int y, double rho, doub
 	}
 }
 
+__device__ void gpu_nonequilibrium(unsigned int x, unsigned int y, double ux, double uy, double tauxx, double tauxy, double tauyy, double *fneq){
+
+	double cs = 1.0/as_d;
+
+	double cs2 = cs*cs;
+	double cs4 = cs2*cs2;
+	double cs6 = cs4*cs2;
+
+	double B = 1.0/(2.0*cs4);
+	double C = 1.0/(6.0*cs6);
+
+	double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
+	for(int n = 0; n < q; ++n){
+
+		double ex2 = ex_d[n]*ex_d[n];
+		double ey2 = ey_d[n]*ey_d[n];
+
+		double order_2 = B*(tauxx*(ex2 - cs2) + 2*tauxy*ex_d[n]*ey_d[n] + tauyy*(ey2 - cs2));
+
+		double xxx = 3*ux*tauxx*(ex2 - 3*cs2)*ex_d[n];
+		double xxy = (2*ux*tauxy + uy*tauxx)*(ex2 - cs2)*ey_d[n];
+		double xyy = (ux*tauyy + 2*uy*tauxy)*(ey2 - cs2)*ex_d[n];
+		double yyy = 3*uy*tauyy*(ey2 - 3*cs2)*ey_d[n];
+		double order_3 = C*(xxx + 3*xxy + 3*xyy + yyy);
+
+		fneq[gpu_fieldn_index(x, y, n)] = W[n]*(order_2 + order_3);
+	}
+}
+
 // Recursive Regularized Distribuition
 __device__ void gpu_recursive(unsigned int x, unsigned int y, double rho, double ux, double uy, double tauxx, double tauxy, double tauyy, double *frec){
 
@@ -203,7 +232,7 @@ __global__ void gpu_init_equilibrium(double *f1, double *r, double *u, double *v
 	gpu_equilibrium(x, y, rho, ux, uy, f1);
 }
 
-__host__ void stream_collide_save(double *f1, double *f2, double *feq, double *frec, double *S, double *r, double *u, double *v, double *txx, double *txy, double *tyy, bool save){
+__host__ void stream_collide_save(double *f1, double *f2, double *feq, double *fneq, double *frec, double *S, double *r, double *u, double *v, double *txx, double *txy, double *tyy, bool save){
 
 	dim3 grid(Nx/nThreads, Ny, 1);
 	dim3 block(nThreads, 1, 1);
@@ -211,11 +240,11 @@ __host__ void stream_collide_save(double *f1, double *f2, double *feq, double *f
 	//dim3 grid(1,1,1);
 	//dim3 block(1,1,1);
 
-	gpu_stream_collide_save<<< grid, block >>>(f1, f2, feq, frec, S, r, u, v, txx, txy, tyy, save);
+	gpu_stream_collide_save<<< grid, block >>>(f1, f2, feq, fneq, frec, S, r, u, v, txx, txy, tyy, save);
 	getLastCudaError("gpu_stream_collide_save kernel error");
 }
 
-__global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, double *frec, double *S, double *r, double *u, double *v, double *txx, double *txy, double *tyy, bool save){
+__global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, double *fneq, double *frec, double *S, double *r, double *u, double *v, double *txx, double *txy, double *tyy, bool save){
 
 	const double omega = 1.0/tau_d;
 
@@ -256,10 +285,12 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 
 	gpu_equilibrium(x, y, rho, ux, uy, feq);
 	gpu_recursive(x, y, rho, ux, uy, tauxx, tauxy, tauyy, frec);
+	gpu_nonequilibrium(x, y, ux, uy, tauxx, tauxy, tauyy, fneq);
 
 	// Collision Step
 	for(int n = 0; n < q; ++n){
 		f2[gpu_fieldn_index(x, y, n)] = omega*feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*frec[gpu_fieldn_index(x, y, n)];
+		//f2[gpu_fieldn_index(x, y, n)] = feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*fneq[gpu_fieldn_index(x, y, n)];
 	}
 }
 

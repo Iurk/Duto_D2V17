@@ -16,7 +16,7 @@ extern __device__ void gpu_recursive(unsigned int, unsigned int, double, double,
 
 void initialization(double*, double);
 void init_equilibrium(double*, double*, double*, double*);
-void stream_collide_save(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, bool);
+void stream_collide_save(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, bool);
 double report_convergence(unsigned int, double* , double*, double*, double*, bool msg);
 double compute_convergence(double*, double*, double*, double*);
 std::vector<double> report_flow_properties(unsigned int, double, double*, double*, double*, double*, double*, bool);
