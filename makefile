@@ -10,7 +10,7 @@ EXE = lbm
 # Compilers
 NVCC := nvcc
 
-LIBRARY := yaml-cpp
+LIBRARY := yaml-cpp sundials_kinsol sundials_nvecserial sundials_nvecmanyvector
 LIBDIR := /usr/local/lib
 
 # GPU
@@ -38,35 +38,37 @@ C_DEP := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.d, $(C_FILES))
 CU_DEP := $(patsubst $(SRCDIR)/%.cu, $(OBJDIR)/%.d, $(CU_FILES))
 CPP_DEP := $(patsubst $(SRCDIR)/%.cpp, $(OBJDIR)/%.d, $(CPP_FILES))
 
-OBJ_COMP := $(CU_OBJ) $(CPP_OBJ)
-DEP_COMP := $(CU_DEP) $(CPP_DEP)
-
 OBJ := $(C_OBJ) $(CPP_OBJ) $(CU_OBJ)
 DEP := $(C_DEP) $(CPP_DEP) $(CU_DEP)
 
 # Flags
+CFLAGS := -O3 -DNDEBUG
 NVCCARCHFLAG := -arch sm_61
 NVCCFLAGS := -std=c++11 -v --ptxas-options=-v -O3 --device-c # Para debug flag -g -G e executar com cuda-memcheck ./lbm |more
 LDFLAGS := $(addprefix -L, $(LIBDIR))
 DEPFLAGS := -MMD
+LINKFLAGS := -Xcompiler \"-Wl,-rpath,/usr/local/lib\"
 
 INCLUDES := $(addprefix -I, $(INCDIR))
-LIBRARIES := $(addprefix -l, $(LIBRARY))
+LIBRARIES := $(addprefix -l, $(LIBRARY)) -lm /usr/lib/x86_64-linux-gnu/librt.so
 
-ALL_CPFLAGS := $(DEPFLAGS)
-ALL_CPFLAGS += $(NVCCARCHFLAG)
-ALL_CPFLAGS += $(NVCCFLAGS)
+ALL_CFLAGS := $(DEPFLAGS)
+ALL_CFLAGS += $(CFLAGS)
+
+ALL_CPPFLAGS := $(DEPFLAGS)
+ALL_CPPFLAGS += $(NVCCARCHFLAG)
+ALL_CPPFLAGS += $(NVCCFLAGS)
 
 ALL_LDFLAGS := $(LDFLAGS)
+ALL_LDFLAGS += $(LINKFLAGS)
 
 CXXFLAGS := -std=c++11
 NVCCARCHFLAG := -arch $(ARCH)
 NVCCFLAGS := -v --ptxas-options=-v -O3 # Para debug flag -g -G e executar com cuda-memcheck ./lbm |more
 
-
-COMPILE.c = $(NVCC) $(DEPFLAGS) -g $(INCLUDES) -c
-COMPILE.cpp = $(NVCC) $(ALL_CPFLAGS) $(INCLUDES) --device-c
-COMPILE.cu = $(NVCC) $(ALL_CPFLAGS) $(INCLUDES) --device-c
+COMPILE.c = $(NVCC) $(ALL_CFLAGS) -g $(INCLUDES) -c
+COMPILE.cpp = $(NVCC) $(ALL_CPPFLAGS) $(INCLUDES) --device-c
+COMPILE.cu = $(NVCC) $(ALL_CPPFLAGS) $(INCLUDES) --device-c
 
 .PHONY: all clean mesh plot refresh run
 
