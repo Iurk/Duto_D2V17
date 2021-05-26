@@ -10,9 +10,9 @@ extern __device__ int *ex_d, *ey_d;
 extern __device__ bool *walls_d, *inlet_d, *outlet_d;
 
 extern __device__ double poiseulle_eval(unsigned int, unsigned int);
-extern __device__ void hermite_polynomial(int, int, double, double*);
-extern __device__ void hermite_moments(double, double, double, double, double, double, double*);
-extern __device__ void gpu_recursive(unsigned int, unsigned int, double, double, double, double, double, double, double*);
+extern __host__ __device__ void hermite_polynomial(int, int, double, double*);
+extern __host__ __device__ void hermite_moments(double, double, double, double, double, double, double*);
+extern __host__ __device__ void recursive_dist(unsigned int, unsigned int, double, double, double, double, double, double, double*);
 
 void initialization(double*, double);
 void init_equilibrium(double*, double*, double*, double*);

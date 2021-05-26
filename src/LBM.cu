@@ -24,12 +24,20 @@ __device__ int *ex_d, *ey_d;
 // Mesh data
 __device__ bool *walls_d, *inlet_d, *outlet_d;
 
-__device__ __forceinline__ size_t gpu_scalar_index(unsigned int x, unsigned int y){
-	return Nx_d*y + x;
+__host__ __device__ __forceinline__ size_t gpu_scalar_index(unsigned int x, unsigned int y){
+	#if defined(__CUDA_ARCH__)
+		return Nx_d*y + x;
+	#else
+		return Nx*y + x;
+	#endif
 }
 
-__device__ __forceinline__ size_t gpu_fieldn_index(unsigned int x, unsigned int y, unsigned int d){
-	return (Nx_d*(Ny_d*(d) + y) + x);
+__host__ __device__ __forceinline__ size_t gpu_fieldn_index(unsigned int x, unsigned int y, unsigned int d){
+	#if defined(__CUDA_ARCH__)
+		return Nx_d*(Ny_d*(d) + y) + x;
+	#else
+		return Nx*(Ny*(d) + y) + x;
+	#endif
 }
 
 __global__ void gpu_init_equilibrium(double*, double*, double*, double*);
@@ -40,7 +48,7 @@ __global__ void gpu_print_mesh(int);
 __global__ void gpu_initialization(double*, double);
 
 // Hermite Polynomials
-__device__ void hermite_polynomial(int ex, int ey, double cs, double *H){
+__host__ __device__ void hermite_polynomial(int ex, int ey, double cs, double *H){
 
 	double cs2 = cs*cs;
 
@@ -56,14 +64,14 @@ __device__ void hermite_polynomial(int ex, int ey, double cs, double *H){
 	H[4] = ex*ey;				// 2 - xy
 	H[5] = ey2 - cs2;			// 2 - yy
 	H[6] = ex3 - 3*ex*cs2;		// 3 - xxx
-	H[7] = ex2*ey - ey*cs2;		// 3 - yxx
+	H[7] = ex2*ey - ey*cs2;		// 3 - xxy
 	H[8] = ex*ey2 - ex*cs2;		// 3 - xyy
 	H[9] = ey3 - 3*ey*cs2;		// 3 - yyy
 
 }
 
 // Hermite Moments
-__device__ void hermite_moments(double rho, double ux, double uy, double tauxx, double tauxy, double tauyy, double *a){
+__host__ __device__ void hermite_moments(double rho, double ux, double uy, double tauxx, double tauxy, double tauyy, double *a){
 
 	double ux2 = ux*ux;
 	double uy2 = uy*uy;
@@ -77,7 +85,7 @@ __device__ void hermite_moments(double rho, double ux, double uy, double tauxx, 
 	a[4] = rho*ux*uy + tauxy;							// 2 - xy
 	a[5] = rho*uy2 + tauyy;								// 2 - yy
 	a[6] = rho*ux3 + 3*ux*tauxx;						// 3 - xxx
-	a[7] = rho*ux2*uy + 2*ux*tauxy + uy*tauxx;			// 3 - yxx
+	a[7] = rho*ux2*uy + 2*ux*tauxy + uy*tauxx;			// 3 - xxy
 	a[8] = rho*ux*uy2 + 2*uy*tauxy + ux*tauyy;			// 3 - xyy
 	a[9] = rho*uy3 + 3*uy*tauyy;						// 3 - yyy
 }
@@ -113,10 +121,10 @@ __device__ void gpu_equilibrium(unsigned int x, unsigned int y, double rho, doub
 		double order_2 = B*(ux2*(ex2 - cs2) + 2*ux*uy*ex_d[n]*ey_d[n] + uy2*(ey2 - cs2));
 		
 		double xxx = ux3*(ex3 - 3*ex_d[n]*cs2);
-		double yxx = ux2*uy*(ex2*ey_d[n] - ey_d[n]*cs2);
+		double xxy = ux2*uy*(ex2*ey_d[n] - ey_d[n]*cs2);
 		double xyy = ux*uy2*(ex_d[n]*ey2 - ex_d[n]*cs2);
 		double yyy = uy3*(ey3 - 3*ey_d[n]*cs2);
-		double order_3 = C*(xxx + 3*yxx + 3*xyy + yyy);
+		double order_3 = C*(xxx + 3*xxy + 3*xyy + yyy);
 
 		feq[gpu_fieldn_index(x, y, n)] = W[n]*rho*(1 + order_1 + order_2 + order_3);
 	}
@@ -152,9 +160,20 @@ __device__ void gpu_nonequilibrium(unsigned int x, unsigned int y, double ux, do
 }
 
 // Recursive Regularized Distribuition
-__device__ void gpu_recursive(unsigned int x, unsigned int y, double rho, double ux, double uy, double tauxx, double tauxy, double tauyy, double *frec){
+__host__ __device__ void recursive_dist(unsigned int x, unsigned int y, double rho, double ux, double uy, double tauxx, double tauxy, double tauyy, double *frec){
 
-	double cs = 1.0/as_d;
+	#if defined(__CUDA_ARCH__)
+		double cs = 1.0/as_d;
+		double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
+		int *ex = ex_d;
+		int *ey = ey_d;
+		unsigned int Q = q;
+	#else
+		double cs = 1.0/as;
+		double W[] = {w0, wp, wp, wp, wp, ws, ws, ws, ws, wt, wt, wt, wt, wq, wq, wq, wq};
+		unsigned int Q = ndir;
+	#endif
+
 	double cs2 = cs*cs;
 	double cs4 = cs2*cs2;
 	double cs6 = cs4*cs2;
@@ -163,12 +182,10 @@ __device__ void gpu_recursive(unsigned int x, unsigned int y, double rho, double
 	double B = 1.0/(2.0*cs4);
 	double C = 1.0/(6.0*cs6);
 
-	double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
-
 	// Calculating the regularized recursive distribution
 	double a[10], H[10];
-	for(int n = 0; n < q; ++n){
-		hermite_polynomial(ex_d[n], ey_d[n], cs, H);
+	for(int n = 0; n < Q; ++n){
+		hermite_polynomial(ex[n], ey[n], cs, H);
 		hermite_moments(rho, ux, uy, tauxx, tauxy, tauyy, a);
 
 		double order_1 = A*(a[1]*H[1] + a[2]*H[2]);
@@ -284,7 +301,7 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 	tyy[gpu_scalar_index(x, y)] = tauyy;
 
 	gpu_equilibrium(x, y, rho, ux, uy, feq);
-	gpu_recursive(x, y, rho, ux, uy, tauxx, tauxy, tauyy, frec);
+	recursive_dist(x, y, rho, ux, uy, tauxx, tauxy, tauyy, frec);
 	gpu_nonequilibrium(x, y, ux, uy, tauxx, tauxy, tauyy, fneq);
 
 	// Collision Step
