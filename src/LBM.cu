@@ -46,8 +46,6 @@ __device__ void hermite_polynomial(int ex, int ey, double cs, double *H){
 
 	double ex2 = ex*ex;
 	double ey2 = ey*ey;
-	double ex3 = ex*ex*ex;
-	double ey3 = ey*ey*ey;
 
 	H[0] = 1;					// 0
 	H[1] = ex;					// 1 - x
@@ -55,10 +53,10 @@ __device__ void hermite_polynomial(int ex, int ey, double cs, double *H){
 	H[3] = ex2 - cs2;			// 2 - xx
 	H[4] = ex*ey;				// 2 - xy
 	H[5] = ey2 - cs2;			// 2 - yy
-	H[6] = ex3 - 3*ex*cs2;		// 3 - xxx
-	H[7] = ex2*ey - ey*cs2;		// 3 - yxx
-	H[8] = ex*ey2 - ex*cs2;		// 3 - xyy
-	H[9] = ey3 - 3*ey*cs2;		// 3 - yyy
+	H[6] = (ex2 - 3*cs2)*ex;	// 3 - xxx
+	H[7] = (ex2 - cs2)*ey;		// 3 - yxx
+	H[8] = (ey2 - cs2)*ex;		// 3 - xyy
+	H[9] = (ey2 - 3*cs2)*ey;	// 3 - yyy
 
 }
 
@@ -116,7 +114,7 @@ __device__ void gpu_equilibrium(unsigned int x, unsigned int y, double rho, doub
 		double yxx = ux2*uy*(ex2*ey_d[n] - ey_d[n]*cs2);
 		double xyy = ux*uy2*(ex_d[n]*ey2 - ex_d[n]*cs2);
 		double yyy = uy3*(ey3 - 3*ey_d[n]*cs2);
-		double order_3 = C*(xxx + 3*yxx + 3*xyy + yyy);
+		double order_3 = 0; //C*(xxx + 3*yxx + 3*xyy + yyy);
 
 		feq[gpu_fieldn_index(x, y, n)] = W[n]*rho*(1 + order_1 + order_2 + order_3);
 	}
@@ -173,7 +171,7 @@ __device__ void gpu_recursive(unsigned int x, unsigned int y, double rho, double
 
 		double order_1 = A*(a[1]*H[1] + a[2]*H[2]);
 		double order_2 = B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]);
-		double order_3 = C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]);
+		double order_3 = 0; //C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]);
 
 		frec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + order_1 + order_2 + order_3);
 	}
@@ -258,15 +256,12 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 
 	double rho = 0, ux_i = 0, uy_i = 0, Pxx = 0, Pxy = 0, Pyy = 0;
 	for(int n = 0; n < q; ++n){
-		x_att = (x - ex_d[n] + Nx_d)%Nx_d;
-		y_att = (y - ey_d[n] + Ny_d)%Ny_d;
-
-		rho += f1[gpu_fieldn_index(x_att, y_att, n)];
-		ux_i += f1[gpu_fieldn_index(x_att, y_att, n)]*ex_d[n];
-		uy_i += f1[gpu_fieldn_index(x_att, y_att, n)]*ey_d[n];
-		Pxx += f1[gpu_fieldn_index(x_att, y_att, n)]*(ex_d[n]*ex_d[n] - cs2);
-		Pxy += f1[gpu_fieldn_index(x_att, y_att, n)]*ex_d[n]*ey_d[n];
-		Pyy += f1[gpu_fieldn_index(x_att, y_att, n)]*(ey_d[n]*ey_d[n] - cs2);
+		rho += f1[gpu_fieldn_index(x, y, n)];
+		ux_i += f1[gpu_fieldn_index(x, y, n)]*ex_d[n];
+		uy_i += f1[gpu_fieldn_index(x, y, n)]*ey_d[n];
+		Pxx += f1[gpu_fieldn_index(x, y, n)]*(ex_d[n]*ex_d[n] - cs2);
+		Pxy += f1[gpu_fieldn_index(x, y, n)]*ex_d[n]*ey_d[n];
+		Pyy += f1[gpu_fieldn_index(x, y, n)]*(ey_d[n]*ey_d[n] - cs2);
 	}
 
 	double ux = ux_i/rho;
@@ -287,9 +282,12 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 	gpu_recursive(x, y, rho, ux, uy, tauxx, tauxy, tauyy, frec);
 	gpu_nonequilibrium(x, y, ux, uy, tauxx, tauxy, tauyy, fneq);
 
-	// Collision Step
+	// Collision and Stream Step
 	for(int n = 0; n < q; ++n){
-		f2[gpu_fieldn_index(x, y, n)] = omega*feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*frec[gpu_fieldn_index(x, y, n)];
+		x_att = (x + ex_d[n] + Nx_d)%Nx_d;
+		y_att = (y + ey_d[n] + Ny_d)%Ny_d;
+
+		f2[gpu_fieldn_index(x_att, y_att, n)] = feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*frec[gpu_fieldn_index(x, y, n)];
 		//f2[gpu_fieldn_index(x, y, n)] = feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*fneq[gpu_fieldn_index(x, y, n)];
 	}
 }
