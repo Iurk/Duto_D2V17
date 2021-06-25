@@ -4,7 +4,7 @@ domain:
 
 simulation:
   lattice: D2V17
-  NSTEPS: 500000
+  NSTEPS: 100000
   NSAVE: 2000
   NMSG: 1000
   meshprint: false
@@ -14,13 +14,13 @@ gpu:
   nThreads: 32
 
 input:
-  Re: 100
+  Re: 1000
   u_max: 0.0625
   rho0: 1.0
 
 output:
   plot_module: true
-  plot_profiles: true
+  plot_profiles: false
 
 air:
   rho: 1.21
