@@ -241,7 +241,7 @@ __device__ void device_inlet_PP(unsigned int x, unsigned int y, double rho_in, d
 
 	double uy_in = 0.0;
 
-	double rhoI = 0, rhomxx = 0, rhomxy = 0, rhomxxx = 0, rhomxxy = 0;
+	double rhoI = 0.0, rhomxx = 0.0, rhomxy = 0.0, rhomxxx = 0.0, rhomxxy = 0.0;
 	double *prhoI = &rhoI, *prhomxx = &rhomxx, *prhomxy = &rhomxy, *prhomxxx = &rhomxxx, *prhomxxy = &rhomxxy;
 
 	if(x == 0){
@@ -256,23 +256,11 @@ __device__ void device_inlet_PP(unsigned int x, unsigned int y, double rho_in, d
 		double mxy = (2.57129750702885*rhomxxy + 3.73177207142366*rhomxy)/rho_in;
 		double mxxx = (0.208023617035681*rho_in - 0.237543794896928*rhoI + 2.12172701123547*rhomxxx + 0.355195692599559*rhomxx)/rho_in;
 		double mxxy = (2.82710005410884*rhomxxy + 1.90405540527407*rhomxy)/rho_in;
-		double m[10] = {rho_in, ux, uy_in, mxx, mxy, 0, mxxx, mxxy, 0, 0};
+		double m[10] = {rho_in, ux, uy_in, mxx, mxy, 0.0, mxxx, mxxy, 0.0, 0.0};
 
 		gpu_recursive_inlet_pressure(x, y, rho_in, m, frec);
-
-		double cs = 1.0/as_d;
-		double cs2 = cs*cs;
-		double cs4 = cs2*cs2;
-		double cs6 = cs4*cs2;
-
-		double A = 1.0/(cs2);
-		double B = 1.0/(2.0*cs4);
-		double C = 1.0/(6.0*cs6);
-
-		double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
 		for(int n = 0; n < q; ++n){
-			//f[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
-			f[gpu_fieldn_index(x, y, n)] = W[n]*(rho_in + A*ex_d[n]*ux + B*((ex_d[n]*ex_d[n] - cs2)*rhomxx + 2*ex_d[n]*ey_d[n]*rhomxy) + C*((ex_d[n]*ex_d[n] - 3*cs2)*ex_d[n]*rhomxxx + 3*(ex_d[n]*ex_d[n] - cs2)*ey_d[n]*rhomxxy));
+			f[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
 		}
 	}
 
@@ -360,7 +348,7 @@ __device__ void device_outlet_PP(unsigned int x, unsigned int y, double rho_out,
 
 	double uy_out = 0.0;
 
-	double rhoI = 0, rhomxx = 0, rhomxy = 0, rhomxxx = 0, rhomxxy = 0;
+	double rhoI = 0.0, rhomxx = 0.0, rhomxy = 0.0, rhomxxx = 0.0, rhomxxy = 0.0;
 	double *prhoI = &rhoI, *prhomxx = &rhomxx, *prhomxy = &rhomxy, *prhomxxx = &rhomxxx, *prhomxxy = &rhomxxy;
 
 	if(x == Nx_d-1){
@@ -377,23 +365,11 @@ __device__ void device_outlet_PP(unsigned int x, unsigned int y, double rho_out,
 		double mxxx = (-0.208023617035681*rho_out + 0.237543794896928*rhoI + 2.12172701123547*rhomxxx - 0.355195692599559*rhomxx)/rho_out;
 		double mxxy = (2.82710005410884*rhomxxy - 1.90405540527407*rhomxy)/rho_out;
 		
-		double m[10] = {rho_out, ux, uy_out, mxx, mxy, 0, mxxx, mxxy, 0, 0};
+		double m[10] = {rho_out, ux, uy_out, mxx, mxy, 0.0, mxxx, mxxy, 0.0, 0.0};
 
 		gpu_recursive_inlet_pressure(x, y, rho_out, m, frec);
-		double cs = 1.0/as_d;
-		double cs2 = cs*cs;
-		double cs4 = cs2*cs2;
-		double cs6 = cs4*cs2;
-
-		double A = 1.0/(cs2);
-		double B = 1.0/(2.0*cs4);
-		double C = 1.0/(6.0*cs6);
-
-		double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
 		for(int n = 0; n < q; ++n){
-			//f[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
-			f[gpu_fieldn_index(x, y, n)] = W[n]*(rho_out + A*ex_d[n]*ux + B*((ex_d[n]*ex_d[n] - cs2)*rhomxx + 2*ex_d[n]*ey_d[n]*rhomxy) + C*((ex_d[n]*ex_d[n] - 3*cs2)*ex_d[n]*rhomxxx + 3*(ex_d[n]*ex_d[n] - cs2)*ey_d[n]*rhomxxy));
-
+			f[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
 		}
 	}
 
