@@ -114,7 +114,7 @@ __device__ void gpu_equilibrium(unsigned int x, unsigned int y, double rho, doub
 		double yxx = ux2*uy*(ex2*ey_d[n] - ey_d[n]*cs2);
 		double xyy = ux*uy2*(ex_d[n]*ey2 - ex_d[n]*cs2);
 		double yyy = uy3*(ey3 - 3*ey_d[n]*cs2);
-		double order_3 = 0; //C*(xxx + 3*yxx + 3*xyy + yyy);
+		double order_3 = C*(xxx + 3*yxx + 3*xyy + yyy);
 
 		feq[gpu_fieldn_index(x, y, n)] = W[n]*rho*(1 + order_1 + order_2 + order_3);
 	}
@@ -171,7 +171,7 @@ __device__ void gpu_recursive(unsigned int x, unsigned int y, double rho, double
 
 		double order_1 = A*(a[1]*H[1] + a[2]*H[2]);
 		double order_2 = B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]);
-		double order_3 = 0; //C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]);
+		double order_3 = C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]);
 
 		frec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + order_1 + order_2 + order_3);
 	}
@@ -287,9 +287,74 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 		x_att = (x + ex_d[n] + Nx_d)%Nx_d;
 		y_att = (y + ey_d[n] + Ny_d)%Ny_d;
 
-		f2[gpu_fieldn_index(x_att, y_att, n)] = feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*frec[gpu_fieldn_index(x, y, n)];
+		f2[gpu_fieldn_index(x_att, y_att, n)] = omega*feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*frec[gpu_fieldn_index(x, y, n)];
 		//f2[gpu_fieldn_index(x, y, n)] = feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*fneq[gpu_fieldn_index(x, y, n)];
 	}
+/*
+	// Applying Boundary Condition Prescribing the pressure
+	if(x == 0){
+		double rho_in = 1.0;
+		double rho_out = 0.999;
+
+		double rhoI = 0.0, rhomxx = 0.0, rhomxy = 0.0, rhomxxx = 0.0, rhomxxy = 0.0;
+		for(int n = 0; n < q; ++n){
+			if(ex_d[n] <= 0){
+				rhoI += f2[gpu_fieldn_index(x, y, n)];
+				rhomxx += f2[gpu_fieldn_index(x, y, n)]*(ex_d[n]*ex_d[n] - cs2);
+				rhomxy += f2[gpu_fieldn_index(x, y, n)]*ex_d[n]*ey_d[n];
+				rhomxxx += f2[gpu_fieldn_index(x, y, n)]*(ex_d[n]*ex_d[n] - 3*cs2)*ex_d[n];
+				rhomxxy += f2[gpu_fieldn_index(x, y, n)]*(ex_d[n]*ex_d[n] - cs2)*ey_d[n];
+			}
+		}
+
+		double ux = (1.02853274853573*rho_in - 1.39116351908114*rhoI - 0.148004964936173*rhomxxx - 0.94084808101913*rhomxx)/rho_in;
+		double mxx = (0.740268695474152*rho_in - 0.750466883119502*rhoI + 0.384569467507977*rhomxxx + 1.12216193413231*rhomxx)/rho_in;
+		double mxy = (2.57129750702885*rhomxxy + 3.73177207142366*rhomxy)/rho_in;
+		double mxxx = (0.208023617035681*rho_in - 0.237543794896928*rhoI + 2.12172701123547*rhomxxx + 0.355195692599559*rhomxx)/rho_in;
+		double mxxy = (2.82710005410884*rhomxxy + 1.90405540527407*rhomxy)/rho_in;
+		double m[10] = {rho_in, ux, 0.0, mxx, mxy, 0.0, mxxx, mxxy, 0.0, 0.0};
+
+		double cs4 = cs2*cs2;
+		double cs6 = cs4*cs2;
+
+		double A = 1.0/(cs2);
+		double B = 1.0/(2.0*cs4);
+		double C = 1.0/(6.0*cs6);
+
+		double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
+
+		// Calculating the regularized recursive distribution
+		double H[10];
+		for(int n = 0; n < q; ++n){
+			hermite_polynomial(ex_d[n], ey_d[n], cs, H);
+
+			double order_1 = A*(m[1]*H[1] + m[2]*H[2]);
+			double order_2 = B*(m[3]*H[3] + 2*m[4]*H[4] + m[5]*H[5]);
+			double order_3 = C*(m[6]*H[6] + 3*m[7]*H[7] + 3*m[8]*H[8] + m[9]*H[9]);
+
+			f2[gpu_fieldn_index(x, y, n)] = W[n]*(m[0]*H[0] + order_1 + order_2 + order_3);
+		}
+	}
+
+	else if(x == 1){
+		f2[gpu_fieldn_index(x, y, 9)] = f2[gpu_fieldn_index(x, y, 11)] - feq[gpu_fieldn_index(x, y, 11)] + feq[gpu_fieldn_index(x, y, 9)];
+		f2[gpu_fieldn_index(x, y, 12)] = f2[gpu_fieldn_index(x, y, 10)] - feq[gpu_fieldn_index(x, y, 10)] + feq[gpu_fieldn_index(x, y, 12)];
+
+		if(y > 0 && y < Ny_d-2){
+			f2[gpu_fieldn_index(x, y, 9)] = (1.0/3.0)*f2[gpu_fieldn_index(x-1, y-1, 9)] + f2[gpu_fieldn_index(x+1, y+1, 9)] - (1.0/3.0)*f2[gpu_fieldn_index(x+2, y+2, 9)];
+		}
+
+		if(y > 1 && y < Ny_d-1){
+			f2[gpu_fieldn_index(x, y, 12)] = (1.0/3.0)*f2[gpu_fieldn_index(x-1, y+1, 12)] + f2[gpu_fieldn_index(x+1, y-1, 12)] - (1.0/3.0)*f2[gpu_fieldn_index(x+2, y-2, 12)];
+		}
+		
+		f2[gpu_fieldn_index(x, y, 13)] = (1.0/2.0)*f2[gpu_fieldn_index(x-1, y, 13)] + f2[gpu_fieldn_index(x+2, y, 13)] - (1.0/2.0)*f2[gpu_fieldn_index(x+3, y, 13)];
+	}
+
+	else if(x == 2){
+		f2[gpu_fieldn_index(x, y, 13)] = (1.0/6.0)*f2[gpu_fieldn_index(x-2, y, 13)] + (4.0/3.0)*f2[gpu_fieldn_index(x+1, y, 13)] - (1.0/2.0)*f2[gpu_fieldn_index(x+2, y, 13)];
+	}
+	*/
 }
 
 __host__ double report_convergence(unsigned int t, double *u, double *u_old, double *conv_host, double *conv_gpu, bool msg){
