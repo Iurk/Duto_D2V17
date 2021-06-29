@@ -22,6 +22,8 @@ const YAML::Node& lattice = config_lattice[Lattice];
 namespace myGlobals{
 
 	//Domain
+	double H = domain["H"].as<double>();
+	double D = domain["D"].as<double>();
 	unsigned int Nx = domain["Nx"].as<unsigned int>();
 	unsigned int Ny = domain["Ny"].as<unsigned int>();
 
@@ -37,6 +39,7 @@ namespace myGlobals{
 
 	//Input
 	double u_max = input["u_max"].as<double>();
+	double u_max_si = input["u_max_si"].as<double>();
 	double rho0 = input["rho0"].as<double>();
 	double Re = input["Re"].as<double>();
 
@@ -71,6 +74,11 @@ namespace myGlobals{
 	// Nu and Tau
 	double nu = (u_max*Ny)/Re;
 	const double tau = nu*(as*as) + 0.5;
+
+	// Deltas
+	double delx = H/(Nx-1);
+	double dely = D/(Ny-1);
+	double delt = delx/16;
 
 	bool *walls = read_bin(walls_mesh);
 	bool *inlet = read_bin(inlet_mesh);
