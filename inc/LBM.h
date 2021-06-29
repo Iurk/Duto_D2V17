@@ -22,6 +22,7 @@ double compute_convergence(double*, double*, double*, double*);
 std::vector<double> report_flow_properties(unsigned int, double, double*, double*, double*, double*, double*, bool);
 std::vector<double> compute_flow_properties(unsigned int, double*, double*, double*, std::vector<double>, double*, double*);
 void wrapper_input(unsigned int*, unsigned int*, double*, double*, double*, const double*, const double*);
+void wrapper_analytical(double*, double*, double*, double*, double*);
 void wrapper_lattice(unsigned int*, double*, double*, double*, double*, double*, double*);
 int* generate_e(int*, std::string);
 bool* generate_mesh(bool*, std::string);
