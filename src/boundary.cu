@@ -41,7 +41,7 @@ __device__ void gpu_recursive_inlet_pressure(unsigned int x, unsigned int y, dou
 		double order_2 = B*(a[3]*H[3] + 2*a[4]*H[4] + a[5]*H[5]);
 		double order_3 = C*(a[6]*H[6] + 3*a[7]*H[7] + 3*a[8]*H[8] + a[9]*H[9]);
 
-		frec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + order_1 + order_2 + order_3);
+		frec[gpu_fieldn_index(x, y, n)] = W[n]*(a[0]*H[0] + a[0]*order_1 + order_2 + order_3);
 	}
 }
 
@@ -241,22 +241,23 @@ __device__ void device_inlet_PP(unsigned int x, unsigned int y, double rho_in, d
 
 	double uy_in = 0.0;
 
-	double rhoI = 0.0, rhomxx = 0.0, rhomxy = 0.0, rhomxxx = 0.0, rhomxxy = 0.0;
-	double *prhoI = &rhoI, *prhomxx = &rhomxx, *prhomxy = &rhomxy, *prhomxxx = &rhomxxx, *prhomxxy = &rhomxxy;
+	double rhoIk = 0.0, rhomxxk = 0.0, rhomxyk = 0.0, rhomxxxk = 0.0, rhomxxyk = 0.0;
+	double *prhoI = &rhoIk, *prhomxx = &rhomxxk, *prhomxy = &rhomxyk, *prhomxxx = &rhomxxxk, *prhomxxy = &rhomxxyk;
 
+	double ux, rhomxx, rhomxy, rhomxxx, rhomxxy;
 	if(x == 0){
 		unsigned int NI = 11;
 		unsigned int I[11] = {0, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16};
 
 		known_moments(x, y, NI, I, f, prhoI, prhomxx, prhomxy, prhomxxx, prhomxxy);
-		rhoI = *prhoI, rhomxx = *prhomxx, rhomxy = *prhomxy, rhomxxx = *prhomxxx, rhomxxy = *prhomxxy;
+		rhoIk = *prhoI, rhomxxk = *prhomxx, rhomxyk = *prhomxy, rhomxxxk = *prhomxxx, rhomxxyk = *prhomxxy;
 
-		double ux = (1.02853274853573*rho_in - 1.39116351908114*rhoI - 0.148004964936173*rhomxxx - 0.94084808101913*rhomxx)/rho_in;
-		double mxx = (0.740268695474152*rho_in - 0.750466883119502*rhoI + 0.384569467507977*rhomxxx + 1.12216193413231*rhomxx)/rho_in;
-		double mxy = (2.57129750702885*rhomxxy + 3.73177207142366*rhomxy)/rho_in;
-		double mxxx = (0.208023617035681*rho_in - 0.237543794896928*rhoI + 2.12172701123547*rhomxxx + 0.355195692599559*rhomxx)/rho_in;
-		double mxxy = (2.82710005410884*rhomxxy + 1.90405540527407*rhomxy)/rho_in;
-		double m[10] = {rho_in, ux, uy_in, mxx, mxy, 0.0, mxxx, mxxy, 0.0, 0.0};
+		ux = (1.02853274853573*rho_in - 1.39116351908114*rhoIk - 0.148004964936173*rhomxxxk - 0.94084808101913*rhomxxk)/rho_in;
+		rhomxx = (0.740268695474152*rho_in - 0.750466883119502*rhoIk + 0.384569467507977*rhomxxxk + 1.12216193413231*rhomxxk)/rho_in;
+		rhomxy = (2.57129750702885*rhomxxyk + 3.73177207142366*rhomxyk)/rho_in;
+		rhomxxx = (0.208023617035681*rho_in - 0.237543794896928*rhoIk + 2.12172701123547*rhomxxxk + 0.355195692599559*rhomxxk)/rho_in;
+		rhomxxy = (2.82710005410884*rhomxxyk + 1.90405540527407*rhomxyk)/rho_in;
+		double m[10] = {rho_in, ux, uy_in, rhomxx, rhomxy, 0.0, rhomxxx, rhomxxy, 0.0, 0.0};
 
 		gpu_recursive_inlet_pressure(x, y, rho_in, m, frec);
 		for(int n = 0; n < q; ++n){
@@ -348,24 +349,24 @@ __device__ void device_outlet_PP(unsigned int x, unsigned int y, double rho_out,
 
 	double uy_out = 0.0;
 
-	double rhoI = 0.0, rhomxx = 0.0, rhomxy = 0.0, rhomxxx = 0.0, rhomxxy = 0.0;
-	double *prhoI = &rhoI, *prhomxx = &rhomxx, *prhomxy = &rhomxy, *prhomxxx = &rhomxxx, *prhomxxy = &rhomxxy;
+	double rhoIk = 0.0, rhomxxk = 0.0, rhomxyk = 0.0, rhomxxxk = 0.0, rhomxxyk = 0.0;
+	double *prhoI = &rhoIk, *prhomxx = &rhomxxk, *prhomxy = &rhomxyk, *prhomxxx = &rhomxxxk, *prhomxxy = &rhomxxyk;
 
+	double ux, rhomxx, rhomxy, rhomxxx, rhomxxy;
 	if(x == Nx_d-1){
 		unsigned int NI = 11;
 		unsigned int I[11] = {0, 1, 2, 4, 5, 8, 9, 12, 13, 14, 16};
 
 		known_moments(x, y, NI, I, f, prhoI, prhomxx, prhomxy, prhomxxx, prhomxxy);
 
-		rhoI = *prhoI, rhomxx = *prhomxx, rhomxy = *prhomxy, rhomxxx = *prhomxxx, rhomxxy = *prhomxxy;
+		rhoIk = *prhoI, rhomxxk = *prhomxx, rhomxyk = *prhomxy, rhomxxxk = *prhomxxx, rhomxxyk = *prhomxxy;
 
-		double ux = (-1.02853274853573*rho_out + 1.39116351908114*rhoI - 0.148004964936173*rhomxxx + 0.94084808101913*rhomxx)/rho_out;
-		double mxx = (0.740268695474152*rho_out - 0.750466883119502*rhoI - 0.384569467507977*rhomxxx + 1.12216193413231*rhomxx)/rho_out;
-		double mxy = (-2.57129750702885*rhomxxy + 3.73177207142366*rhomxy)/rho_out;
-		double mxxx = (-0.208023617035681*rho_out + 0.237543794896928*rhoI + 2.12172701123547*rhomxxx - 0.355195692599559*rhomxx)/rho_out;
-		double mxxy = (2.82710005410884*rhomxxy - 1.90405540527407*rhomxy)/rho_out;
-		
-		double m[10] = {rho_out, ux, uy_out, mxx, mxy, 0.0, mxxx, mxxy, 0.0, 0.0};
+		ux = (-1.02853274853573*rho_out + 1.39116351908114*rhoIk - 0.148004964936173*rhomxxxk + 0.94084808101913*rhomxxk)/rho_out;
+		rhomxx = (0.740268695474152*rho_out - 0.750466883119502*rhoIk - 0.384569467507977*rhomxxxk + 1.12216193413231*rhomxxk)/rho_out;
+		rhomxy = (-2.57129750702885*rhomxxyk + 3.73177207142366*rhomxyk)/rho_out;
+		rhomxxx = (-0.208023617035681*rho_out + 0.237543794896928*rhoIk + 2.12172701123547*rhomxxxk - 0.355195692599559*rhomxxk)/rho_out;
+		rhomxxy = (2.82710005410884*rhomxxyk - 1.90405540527407*rhomxyk)/rho_out;
+		double m[10] = {rho_out, ux, uy_out, rhomxx, rhomxy, 0.0, rhomxxx, rhomxxy, 0.0, 0.0};
 
 		gpu_recursive_inlet_pressure(x, y, rho_out, m, frec);
 		for(int n = 0; n < q; ++n){
