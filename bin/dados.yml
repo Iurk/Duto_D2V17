@@ -1,4 +1,6 @@
 domain:
+  H: 1.0
+  D: 0.05
   Nx: 1024
   Ny: 64
 
@@ -16,6 +18,7 @@ gpu:
 input:
   Re: 1000
   u_max: 0.0625
+  u_max_si: 1.0
   rho0: 1.0
 
 output:
