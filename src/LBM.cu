@@ -16,7 +16,10 @@ using namespace myGlobals;
 // Input data
 __constant__ unsigned int Nx_d, Ny_d;
 __constant__ double D_d, delx_d, dely_d, delt_d;
-__constant__ double rho0_d, u_max_d, nu_d, tau_d, mi_ar_d, umax_d;
+__constant__ double rho0_d, u_max_d, nu_d, mi_ar_d, umax_d;
+
+// LBM Data
+__constant__ double tau_d, gx_d, gy_d;
 
 //Lattice Data
 __constant__ unsigned int q;
@@ -179,7 +182,7 @@ __device__ void gpu_recursive(unsigned int x, unsigned int y, double rho, double
 	}
 }
 
-__device__ void gpu_source(unsigned int x, unsigned int y, double gx, double gy, double rho, double ux, double uy, double *S){
+__device__ void gpu_source(unsigned int x, unsigned int y, double rho, double ux, double uy, double *S){
 
 	double cs = 1.0/as_d;
 	double cs2 = cs*cs;
@@ -188,10 +191,10 @@ __device__ void gpu_source(unsigned int x, unsigned int y, double gx, double gy,
 	double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
 
 	for(int n = 0; n < q; ++n){
-		double gdotei = gx*ex_d[n] + gy*ey_d[n];
+		double gdotei = gx_d*ex_d[n] + gy_d*ey_d[n];
 		double udotei = ux*ex_d[n] + uy*ey_d[n];
 
-		double order_1 = gx*(ex_d[n] - ux) + gy*(ey_d[n] - uy);
+		double order_1 = gx_d*(ex_d[n] - ux) + gy_d*(ey_d[n] - uy);
 		double order_2 = A*gdotei*udotei;
 
 		S[gpu_fieldn_index(x, y, n)] = A*W[n]*rho*(order_1 + order_2);
@@ -265,8 +268,8 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 		Pyy += f1[gpu_fieldn_index(x, y, n)]*(ey_d[n]*ey_d[n] - cs2);
 	}
 
-	double ux = ux_i/rho;
-	double uy = uy_i/rho;
+	double ux = (ux_i + 0.5*rho*gx_d)/rho;
+	double uy = (uy_i + 0.5*rho*gy_d)/rho;
 	
 	double tauxx = Pxx - rho*ux*ux;
 	double tauxy = Pxy - rho*ux*uy;
@@ -279,6 +282,7 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 	txy[gpu_scalar_index(x, y)] = tauxy;
 	tyy[gpu_scalar_index(x, y)] = tauyy;
 
+	gpu_source(x, y, rho, ux, uy, S);
 	gpu_equilibrium(x, y, rho, ux, uy, feq);
 	gpu_recursive(x, y, rho, ux, uy, tauxx, tauxy, tauyy, frec);
 	gpu_nonequilibrium(x, y, ux, uy, tauxx, tauxy, tauyy, fneq);
@@ -288,7 +292,7 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 		x_att = (x + ex_d[n] + Nx_d)%Nx_d;
 		y_att = (y + ey_d[n] + Ny_d)%Ny_d;
 
-		f2[gpu_fieldn_index(x_att, y_att, n)] = omega*feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*frec[gpu_fieldn_index(x, y, n)];
+		f2[gpu_fieldn_index(x_att, y_att, n)] = omega*feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*frec[gpu_fieldn_index(x, y, n)] + (1.0 - 0.5*omega)*S[gpu_fieldn_index(x, y, n)];
 		//f2[gpu_fieldn_index(x, y, n)] = feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*fneq[gpu_fieldn_index(x, y, n)];
 	}
 }
@@ -447,13 +451,12 @@ __global__ void gpu_compute_flow_properties(unsigned int t, double *r, double *u
 	}
 }
 
-__host__ void wrapper_input(unsigned int *nx, unsigned int *ny, double *rho, double *u, double *nu, const double *tau, const double *mi_ar){
+__host__ void wrapper_input(unsigned int *nx, unsigned int *ny, double *rho, double *u, double *nu, const double *mi_ar){
 	checkCudaErrors(cudaMemcpyToSymbol(Nx_d, nx, sizeof(unsigned int)));
 	checkCudaErrors(cudaMemcpyToSymbol(Ny_d, ny, sizeof(unsigned int)));
 	checkCudaErrors(cudaMemcpyToSymbol(rho0_d, rho, sizeof(double)));
 	checkCudaErrors(cudaMemcpyToSymbol(u_max_d, u, sizeof(double)));
 	checkCudaErrors(cudaMemcpyToSymbol(nu_d, nu, sizeof(double)));
-	checkCudaErrors(cudaMemcpyToSymbol(tau_d, tau, sizeof(double)));
 	checkCudaErrors(cudaMemcpyToSymbol(mi_ar_d, mi_ar, sizeof(double)));
 }
 
@@ -463,6 +466,12 @@ __host__ void wrapper_analytical(double *d, double *delx, double *dely, double *
 	checkCudaErrors(cudaMemcpyToSymbol(dely_d, dely, sizeof(double)));
 	checkCudaErrors(cudaMemcpyToSymbol(delt_d, delt, sizeof(double)));
 	checkCudaErrors(cudaMemcpyToSymbol(umax_d, umax, sizeof(double)));
+}
+
+__host__ void wrapper_LBM(double *gx, double *gy, const double *tau){
+	checkCudaErrors(cudaMemcpyToSymbol(gx_d, gx, sizeof(double)));
+	checkCudaErrors(cudaMemcpyToSymbol(gy_d, gy, sizeof(double)));
+	checkCudaErrors(cudaMemcpyToSymbol(tau_d, tau, sizeof(double)));
 }
 
 __host__ void wrapper_lattice(unsigned int *ndir, double *a, double *w_0, double *w_p, double *w_s, double *w_t, double *w_q){
