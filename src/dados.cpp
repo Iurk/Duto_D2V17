@@ -14,6 +14,7 @@ const YAML::Node& domain = config["domain"];
 const YAML::Node& simulation = config["simulation"];
 const YAML::Node& gpu = config["gpu"];
 const YAML::Node& input = config["input"];
+const YAML::Node& boundary = config["boundary"];
 const YAML::Node& air = config["air"];
 
 std::string Lattice = simulation["lattice"].as<std::string>();
@@ -38,11 +39,20 @@ namespace myGlobals{
 	unsigned int nThreads = gpu["nThreads"].as<unsigned int>();
 
 	//Input
-	double u_max = input["u_max"].as<double>();
+	//double u_max = input["u_max"].as<double>();
 	double u_max_si = input["u_max_si"].as<double>();
 	double rho0 = input["rho0"].as<double>();
 	double Re = input["Re"].as<double>();
 
+	//Boundary
+	bool periodic = boundary["periodic"].as<bool>();
+	double gx = boundary["gx"].as<double>();
+	double gy = boundary["gy"].as<double>();
+	std::string inlet_bc = boundary["inlet"].as<std::string>();
+	std::string outlet_bc = boundary["outlet"].as<std::string>();
+	double rhoin = boundary["rhoin"].as<double>();
+	double rhoout = boundary["rhoout"].as<double>();
+	
 	//Air
 	const double mi_ar = air["mi"].as<double>();
 
@@ -71,14 +81,17 @@ namespace myGlobals{
 	const size_t mem_size_ndir = sizeof(double)*Nx*Ny*ndir;
 	const size_t mem_size_scalar = sizeof(double)*Nx*Ny;
 
-	// Nu and Tau
-	double nu = (u_max*Ny)/Re;
-	const double tau = nu*(as*as) + 0.5;
-
 	// Deltas
 	double delx = H/(Nx-1);
 	double dely = D/(Ny-1);
 	double delt = delx/16;
+
+	// Nu and Tau
+	//double u_max = u_max_si*delt/delx;
+	//double nu = (u_max*Ny)/Re;
+	double nu = 0.1/4;
+	double u_max = (nu*Re)/Ny;
+	const double tau = nu*(as*as) + 0.5;
 
 	bool *walls = read_bin(walls_mesh);
 	bool *inlet = read_bin(inlet_mesh);

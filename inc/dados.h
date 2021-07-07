@@ -22,6 +22,11 @@ namespace myGlobals{
 	extern double nu;
 	extern const double tau;
 
+	//Boundary
+	extern bool periodic;
+	extern double gx, gy, rhoin, rhoout;
+	extern std::string inlet_bc, outlet_bc;
+
 	//Air
 	extern const double mi_ar;
 
