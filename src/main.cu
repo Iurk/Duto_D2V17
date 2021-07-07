@@ -89,9 +89,14 @@ int main(int argc, char const *argv[]){
 	checkCudaErrors(cudaEventCreate(&start));
 	checkCudaErrors(cudaEventCreate(&stop));
 
+	if(!periodic){
+		gx = 0.0, gy = 0.0;
+	}
+
 	// Allocation of Input data in Device constant memory
-	wrapper_input(&Nx, &Ny, &rho0, &u_max, &nu, &tau, &mi_ar);
+	wrapper_input(&Nx, &Ny, &rho0, &u_max, &nu, &mi_ar);
 	wrapper_analytical(&D, &delx, &dely, &delt, &u_max_si);
+	wrapper_LBM(&gx, &gy, &tau);
 
 	// Allocation of Lattice data in Device constant and global memory
 	wrapper_lattice(&ndir, &as, &w0, &wp, &ws, &wt, &wq);
@@ -158,8 +163,10 @@ int main(int argc, char const *argv[]){
 		}
 */
 		stream_collide_save(f1_gpu, f2_gpu, feq_gpu, fneq_gpu, frec_gpu, S_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, need_scalars);
-		inlet_BC(1.0, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, "PP");
-		outlet_BC(0.999, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, "FDP");
+		if(!periodic){
+			inlet_BC(rhoin, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, inlet_bc);
+			outlet_BC(rhoout, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, outlet_bc);
+		}
 		//bounce_back(f2_gpu);
 		wall_velocity(f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu);
 		//corners(f2_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu);
@@ -177,7 +184,7 @@ int main(int argc, char const *argv[]){
 		conv_error = report_convergence(n+1, ux_gpu, ux_old_gpu, conv_host, conv_gpu, msg);
 
 		end_step = n+1;
-		if(conv_error < erro_max && n > 1000){
+		if(conv_error < erro_max && n > 1000 && conv_error != 0){
 			break;
 		}
 
