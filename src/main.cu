@@ -164,8 +164,8 @@ int main(int argc, char const *argv[]){
 */
 		stream_collide_save(f1_gpu, f2_gpu, feq_gpu, fneq_gpu, frec_gpu, S_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, need_scalars);
 		if(!periodic){
-			inlet_BC(rhoin, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, inlet_bc);
-			outlet_BC(rhoout, 0.04, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, outlet_bc);
+			inlet_BC(rhoin, u_max, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, inlet_bc);
+			outlet_BC(rhoout, u_max, f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu, outlet_bc);
 		}
 		//bounce_back(f2_gpu);
 		wall_velocity(f2_gpu, feq_gpu, frec_gpu, rho_gpu, ux_gpu, uy_gpu, txx_gpu, txy_gpu, tyy_gpu);
