@@ -430,10 +430,6 @@ __global__ void gpu_compute_flow_properties(unsigned int t, double *r, double *u
 
 	// Compute analytical results
     double uxa = poiseulle_eval(x, y);
-
-    if(x == 0){
-    	printf("y: %d ux: %g uxa: %g\n", y, ux, uxa);
-    }
     
     // Compute terms for L2 error
     uxe2[threadIdx.x]  = (ux - uxa)*(ux - uxa);
