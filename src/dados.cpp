@@ -87,10 +87,10 @@ namespace myGlobals{
 	double delt = delx/16;
 
 	// Nu and Tau
-	//double u_max = u_max_si*delt/delx;
-	//double nu = (u_max*Ny)/Re;
-	double nu = 0.1/4;
-	double u_max = (nu*Re)/Ny;
+	double u_max = u_max_si*delt/delx;
+	double nu = (u_max*Ny)/Re;
+	//double nu = 0.1/4;
+	//double u_max = (nu*Re)/Ny;
 	const double tau = nu*(as*as) + 0.5;
 
 	bool *walls = read_bin(walls_mesh);
