@@ -210,6 +210,8 @@ __device__ double poiseulle_eval(unsigned int x, unsigned int y){
 	double ux_si = (D_d*D_d/(2*mi_ar_d))*gradP*((yA/D_d*(yA/D_d) - (yA/D_d)));
 	double ux_lattice = ux_si*(delt_d/delx_d);
 
+	//printf("graP: %g\n", gradP);
+
 	return ux_lattice;
 }
 
@@ -428,6 +430,10 @@ __global__ void gpu_compute_flow_properties(unsigned int t, double *r, double *u
 
 	// Compute analytical results
     double uxa = poiseulle_eval(x, y);
+
+    if(x == 0){
+    	printf("y: %d ux: %g uxa: %g\n", y, ux, uxa);
+    }
     
     // Compute terms for L2 error
     uxe2[threadIdx.x]  = (ux - uxa)*(ux - uxa);
