@@ -1,8 +1,8 @@
 domain:
   H: 1.0
   D: 0.05
-  Nx: 32
-  Ny: 32
+  Nx: 128
+  Ny: 128
 
 simulation:
   lattice: D2V17
@@ -13,7 +13,7 @@ simulation:
   erro_max: 1e-17
 
 gpu:
-  nThreads: 8
+  nThreads: 32
 
 input:
   Re: 1
@@ -26,7 +26,7 @@ output:
   plot_profiles: false
 
 boundary:
-  periodic: false
+  periodic: true
   gx: 1e-6
   gy: 0.0
   inlet: PP
