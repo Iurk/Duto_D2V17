@@ -1,8 +1,8 @@
 domain:
   H: 1.0
   D: 0.05
-  Nx: 128
-  Ny: 128
+  Nx: 64
+  Ny: 64
 
 simulation:
   lattice: D2V17
@@ -27,7 +27,7 @@ output:
 
 boundary:
   periodic: true
-  gx: 1e-6
+  gx: 1e-3
   gy: 0.0
   inlet: PP
   rhoin: 1.0
