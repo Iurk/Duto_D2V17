@@ -1,8 +1,8 @@
 domain:
   H: 1.0
   D: 0.05
-  Nx: 64
-  Ny: 64
+  Nx: 32
+  Ny: 32
 
 simulation:
   lattice: D2V17
@@ -13,12 +13,12 @@ simulation:
   erro_max: 1e-17
 
 gpu:
-  nThreads: 32
+  nThreads: 8
 
 input:
   Re: 1
   u_max: 0.09
-  u_max_si: 0.25
+  u_max_si: 1.0
   rho0: 1.0
 
 output:
@@ -29,10 +29,10 @@ boundary:
   periodic: false
   gx: 1e-6
   gy: 0.0
-  inlet: VP
+  inlet: PP
   rhoin: 1.0
-  outlet: VP
-  rhoout: 0.999
+  outlet: PP
+  rhoout: 0.8436
 
 air:
   rho: 1.21
