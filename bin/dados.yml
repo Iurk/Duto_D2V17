@@ -6,7 +6,7 @@ domain:
 
 simulation:
   lattice: D2V17
-  NSTEPS: 100000
+  NSTEPS: 4000
   NSAVE: 2000
   NMSG: 1000
   meshprint: false
