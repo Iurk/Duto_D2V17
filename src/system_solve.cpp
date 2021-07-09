@@ -15,11 +15,11 @@ typedef struct{
 	realtype initial[NVAR];
 } *UserData;
 
-void SetInitialGuess(N_Vector, UserData);
+void SetInitialGuess(unsigned int, N_Vector, UserData);
 int SolveIt(void*, N_Vector, N_Vector, int, int);
 int check_flag(void*, const char*, int);
 
-void solving(double *guess, double *solution, void *user_data, int (*function)(N_Vector, N_Vector, void*)){
+void solving(unsigned int NEQ, double *guess, double *solution, void *user_data, int (*function)(N_Vector, N_Vector, void*)){
 
 	// Initializing
 	UserData data;
@@ -39,11 +39,18 @@ void solving(double *guess, double *solution, void *user_data, int (*function)(N
 
 	// Setting Initial Guess
 	data = (UserData)malloc(sizeof *data);
-	data->initial[0] = guess[0];
-	data->initial[1] = guess[1];
-	//data->initial[2] = 0.0;
-	//data->initial[3] = 0.0;
 
+	if(NEQ == 2){
+		data->initial[0] = guess[0];
+		data->initial[1] = guess[1];
+	}
+	else if(NEQ == 4){
+		data->initial[0] = guess[0];
+		data->initial[1] = guess[1];
+		data->initial[2] = guess[2];
+		data->initial[3] = guess[3];
+	}
+	
 	// Creating vectors
 	u1 = N_VNew_Serial(NEQ);
 	if(check_flag((void*)u1, "N_VNew_Serial", 0)) return;
@@ -52,10 +59,10 @@ void solving(double *guess, double *solution, void *user_data, int (*function)(N
 	s = N_VNew_Serial(NEQ);
 	if(check_flag((void*)s, "N_VNew_Serial", 0)) return;
 
-	SetInitialGuess(u1, data);	// Copying data to u1
-	N_VConst(1.0, s);			// Setting scale to 1
+	SetInitialGuess(NEQ, u1, data);			// Copying data to u1
+	N_VConst(1.0, s);						// Setting scale to 1
 
-	fnormtol = FTOL, scsteptol = STOL;	// Setting tolerances
+	fnormtol = FTOL, scsteptol = STOL;		// Setting tolerances
 
 	// Creating the solver
 	kmem = KINCreate();
@@ -80,15 +87,21 @@ void solving(double *guess, double *solution, void *user_data, int (*function)(N
 	flag = KINSetLinearSolver(kmem, LS, J);
 	if(check_flag(&flag, "KINSetLinearSolver", 1)) return;
 
-	N_VScale(1.0, u1, u);		// Setting scale to 1
-	glstr = KIN_NONE;			// Setting the method to solve the system
-	mset = 0;					// Setting the maximum number of nonlinear iterations without a call to the preconditioner or Jacobian setup function
-	SolveIt(kmem, u, s, glstr, mset); // Calling the solver
+	N_VScale(1.0, u1, u);				// Setting scale to 1
+	glstr = KIN_NONE;					// Setting the method to solve the system
+	mset = 0;							// Setting the maximum number of nonlinear iterations without a call to the preconditioner or Jacobian setup function
+	SolveIt(kmem, u, s, glstr, mset); 	// Calling the solver
 
-	solution[0] = NV_Ith_S(u, 0);
-	solution[1] = NV_Ith_S(u, 1);
-	solution[2] = NV_Ith_S(u, 2);
-	solution[3] = NV_Ith_S(u, 3);
+	if(NEQ == 2){
+		solution[0] = NV_Ith_S(u, 0);
+		solution[1] = NV_Ith_S(u, 1);
+	}
+	else if(NEQ == 4){
+		solution[0] = NV_Ith_S(u, 0);
+		solution[1] = NV_Ith_S(u, 1);
+		solution[2] = NV_Ith_S(u, 2);
+		solution[3] = NV_Ith_S(u, 3);
+	}
 
 	N_VDestroy(u1);
 	N_VDestroy(u);
@@ -99,7 +112,7 @@ void solving(double *guess, double *solution, void *user_data, int (*function)(N
 	free(data);
 }
 
-void SetInitialGuess(N_Vector u, UserData data){
+void SetInitialGuess(unsigned int NEQ, N_Vector u, UserData data){
 
 	realtype *udata;
 	realtype *initial;
@@ -108,10 +121,16 @@ void SetInitialGuess(N_Vector u, UserData data){
 
 	initial = data->initial;
 
-	udata[0] = initial[0];
-	udata[1] = initial[1];
-	udata[2] = initial[2];
-	udata[3] = initial[3];
+	if(NEQ == 2){
+		udata[0] = initial[0];
+		udata[1] = initial[1];
+	}
+	else if(NEQ == 4){
+		udata[0] = initial[0];
+		udata[1] = initial[1];
+		udata[2] = initial[2];
+		udata[3] = initial[3];
+	}
 }
 
 int SolveIt(void *kmem, N_Vector u, N_Vector s, int glstr, int mset){
