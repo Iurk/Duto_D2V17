@@ -232,14 +232,14 @@ __host__ __device__ double poiseulle_eval(unsigned int x, unsigned int y){
 		double delyd = dely;
 		double deltd = delt;
 		double mi_ard = mi_ar;
-		double uxmax = u_max;
+		double uxmax = u_max_si;
 	#endif
 
 	double yA = y*delyd;
 
 	double gradP = (-8)*uxmax*mi_ard/(Dd*Dd);
 	double ux_si = (Dd*Dd/(2*mi_ard))*gradP*((yA*yA)/(Dd*Dd) - (yA/Dd));
-	double ux_lattice = ux_si*(deltd/delxd);
+	double ux_lattice = ux_si*(deltd/delxd);	
 
 	return ux_lattice;
 }
