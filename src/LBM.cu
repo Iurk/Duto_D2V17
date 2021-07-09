@@ -14,10 +14,15 @@
 using namespace myGlobals;
 
 // Input data
-__constant__ unsigned int q, Nx_d, Ny_d;
-__constant__ double rho0_d, u_max_d, nu_d, tau_d, mi_ar_d;
+__constant__ unsigned int Nx_d, Ny_d;
+__constant__ double D_d, delx_d, dely_d, delt_d;
+__constant__ double rho0_d, u_max_d, nu_d, mi_ar_d, umax_d;
+
+// LBM Data
+__constant__ double tau_d, gx_d, gy_d;
 
 //Lattice Data
+__constant__ unsigned int q;
 __constant__ double as_d, w0_d, wp_d, ws_d, wt_d, wq_d;
 __device__ int *ex_d, *ey_d;
 
@@ -54,8 +59,6 @@ __host__ __device__ void hermite_polynomial(int ex, int ey, double cs, double *H
 
 	double ex2 = ex*ex;
 	double ey2 = ey*ey;
-	double ex3 = ex*ex*ex;
-	double ey3 = ey*ey*ey;
 
 	H[0] = 1;					// 0
 	H[1] = ex;					// 1 - x
@@ -63,10 +66,10 @@ __host__ __device__ void hermite_polynomial(int ex, int ey, double cs, double *H
 	H[3] = ex2 - cs2;			// 2 - xx
 	H[4] = ex*ey;				// 2 - xy
 	H[5] = ey2 - cs2;			// 2 - yy
-	H[6] = ex3 - 3*ex*cs2;		// 3 - xxx
-	H[7] = ex2*ey - ey*cs2;		// 3 - xxy
-	H[8] = ex*ey2 - ex*cs2;		// 3 - xyy
-	H[9] = ey3 - 3*ey*cs2;		// 3 - yyy
+	H[6] = (ex2 - 3*cs2)*ex;	// 3 - xxx
+	H[7] = (ex2 - cs2)*ey;		// 3 - yxx
+	H[8] = (ey2 - cs2)*ex;		// 3 - xyy
+	H[9] = (ey2 - 3*cs2)*ey;	// 3 - yyy
 
 }
 
@@ -114,16 +117,14 @@ __device__ void gpu_equilibrium(unsigned int x, unsigned int y, double rho, doub
 
 		double ex2 = ex_d[n]*ex_d[n];
 		double ey2 = ey_d[n]*ey_d[n];
-		double ex3 = ex_d[n]*ex_d[n]*ex_d[n];
-		double ey3 = ey_d[n]*ey_d[n]*ey_d[n];
 
 		double order_1 = A*(ux*ex_d[n] + uy*ey_d[n]);
 		double order_2 = B*(ux2*(ex2 - cs2) + 2*ux*uy*ex_d[n]*ey_d[n] + uy2*(ey2 - cs2));
 		
-		double xxx = ux3*(ex3 - 3*ex_d[n]*cs2);
-		double xxy = ux2*uy*(ex2*ey_d[n] - ey_d[n]*cs2);
-		double xyy = ux*uy2*(ex_d[n]*ey2 - ex_d[n]*cs2);
-		double yyy = uy3*(ey3 - 3*ey_d[n]*cs2);
+		double xxx = ux3*(ex2 - 3*cs2)*ex_d[n];
+		double xxy = ux2*uy*(ex2 - cs2)*ey_d[n];
+		double xyy = ux*uy2*(ey2 - cs2)*ex_d[n];
+		double yyy = uy3*(ey2 - 3*cs2)*ey_d[n];
 		double order_3 = C*(xxx + 3*xxy + 3*xyy + yyy);
 
 		feq[gpu_fieldn_index(x, y, n)] = W[n]*rho*(1 + order_1 + order_2 + order_3);
@@ -196,7 +197,7 @@ __host__ __device__ void recursive_dist(unsigned int x, unsigned int y, double r
 	}
 }
 
-__device__ void gpu_source(unsigned int x, unsigned int y, double gx, double gy, double rho, double ux, double uy, double *S){
+__device__ void gpu_source(unsigned int x, unsigned int y, double rho, double ux, double uy, double *S){
 
 	double cs = 1.0/as_d;
 	double cs2 = cs*cs;
@@ -205,10 +206,10 @@ __device__ void gpu_source(unsigned int x, unsigned int y, double gx, double gy,
 	double W[] = {w0_d, wp_d, wp_d, wp_d, wp_d, ws_d, ws_d, ws_d, ws_d, wt_d, wt_d, wt_d, wt_d, wq_d, wq_d, wq_d, wq_d};
 
 	for(int n = 0; n < q; ++n){
-		double gdotei = gx*ex_d[n] + gy*ey_d[n];
+		double gdotei = gx_d*ex_d[n] + gy_d*ey_d[n];
 		double udotei = ux*ex_d[n] + uy*ey_d[n];
 
-		double order_1 = gx*(ex_d[n] - ux) + gy*(ey_d[n] - uy);
+		double order_1 = gx_d*(ex_d[n] - ux) + gy_d*(ey_d[n] - uy);
 		double order_2 = A*gdotei*udotei;
 
 		S[gpu_fieldn_index(x, y, n)] = A*W[n]*rho*(order_1 + order_2);
@@ -216,16 +217,31 @@ __device__ void gpu_source(unsigned int x, unsigned int y, double gx, double gy,
 }
 
 // Poiseulle Flow
-__device__ double poiseulle_eval(unsigned int x, unsigned int y){
+__host__ __device__ double poiseulle_eval(unsigned int x, unsigned int y){
 
-	double y_double = (double) y;
-	double Ny_double = (double) Ny_d;
+	#if defined(__CUDA_ARCH__)
+		double Dd = D_d;
+		double delxd = delx_d;
+		double delyd = dely_d;
+		double deltd = delt_d;
+		double mi_ard = mi_ar_d;
+		double uxmax = umax_d;
+	#else
+		double Dd = D;
+		double delxd = delx;
+		double delyd = dely;
+		double deltd = delt;
+		double mi_ard = mi_ar;
+		double uxmax = u_max;
+	#endif
 
-	double gradP = (-1)*8*u_max_d*mi_ar_d/(Ny_double*Ny_double - 2*Ny_double);
+	double yA = y*delyd;
 
-	double ux = (1.0/(2.0*mi_ar_d))*(gradP)*(y_double*y_double - (Ny_double - 1)*y_double);
+	double gradP = (-8)*uxmax*mi_ard/(Dd*Dd);
+	double ux_si = (Dd*Dd/(2*mi_ard))*gradP*((yA*yA)/(Dd*Dd) - (yA/Dd));
+	double ux_lattice = ux_si*(deltd/delxd);
 
-	return ux;
+	return ux_lattice;
 }
 
 __host__ void init_equilibrium(double *f1, double *r, double *u, double *v){
@@ -275,19 +291,16 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 
 	double rho = 0, ux_i = 0, uy_i = 0, Pxx = 0, Pxy = 0, Pyy = 0;
 	for(int n = 0; n < q; ++n){
-		x_att = (x - ex_d[n] + Nx_d)%Nx_d;
-		y_att = (y - ey_d[n] + Ny_d)%Ny_d;
-
-		rho += f1[gpu_fieldn_index(x_att, y_att, n)];
-		ux_i += f1[gpu_fieldn_index(x_att, y_att, n)]*ex_d[n];
-		uy_i += f1[gpu_fieldn_index(x_att, y_att, n)]*ey_d[n];
-		Pxx += f1[gpu_fieldn_index(x_att, y_att, n)]*(ex_d[n]*ex_d[n] - cs2);
-		Pxy += f1[gpu_fieldn_index(x_att, y_att, n)]*ex_d[n]*ey_d[n];
-		Pyy += f1[gpu_fieldn_index(x_att, y_att, n)]*(ey_d[n]*ey_d[n] - cs2);
+		rho += f1[gpu_fieldn_index(x, y, n)];
+		ux_i += f1[gpu_fieldn_index(x, y, n)]*ex_d[n];
+		uy_i += f1[gpu_fieldn_index(x, y, n)]*ey_d[n];
+		Pxx += f1[gpu_fieldn_index(x, y, n)]*(ex_d[n]*ex_d[n] - cs2);
+		Pxy += f1[gpu_fieldn_index(x, y, n)]*ex_d[n]*ey_d[n];
+		Pyy += f1[gpu_fieldn_index(x, y, n)]*(ey_d[n]*ey_d[n] - cs2);
 	}
 
-	double ux = ux_i/rho;
-	double uy = uy_i/rho;
+	double ux = (ux_i + 0.5*rho*gx_d)/rho;
+	double uy = (uy_i + 0.5*rho*gy_d)/rho;
 	
 	double tauxx = Pxx - rho*ux*ux;
 	double tauxy = Pxy - rho*ux*uy;
@@ -300,13 +313,17 @@ __global__ void gpu_stream_collide_save(double *f1, double *f2, double *feq, dou
 	txy[gpu_scalar_index(x, y)] = tauxy;
 	tyy[gpu_scalar_index(x, y)] = tauyy;
 
+	gpu_source(x, y, rho, ux, uy, S);
 	gpu_equilibrium(x, y, rho, ux, uy, feq);
 	recursive_dist(x, y, rho, ux, uy, tauxx, tauxy, tauyy, frec);
 	gpu_nonequilibrium(x, y, ux, uy, tauxx, tauxy, tauyy, fneq);
 
-	// Collision Step
+	// Collision and Stream Step
 	for(int n = 0; n < q; ++n){
-		f2[gpu_fieldn_index(x, y, n)] = omega*feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*frec[gpu_fieldn_index(x, y, n)];
+		x_att = (x + ex_d[n] + Nx_d)%Nx_d;
+		y_att = (y + ey_d[n] + Ny_d)%Ny_d;
+
+		f2[gpu_fieldn_index(x_att, y_att, n)] = omega*feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*frec[gpu_fieldn_index(x, y, n)] + (1.0 - 0.5*omega)*S[gpu_fieldn_index(x, y, n)];
 		//f2[gpu_fieldn_index(x, y, n)] = feq[gpu_fieldn_index(x, y, n)] + (1.0 - omega)*fneq[gpu_fieldn_index(x, y, n)];
 	}
 }
@@ -468,14 +485,27 @@ __global__ void gpu_compute_flow_properties(unsigned int t, double *r, double *u
 	}
 }
 
-__host__ void wrapper_input(unsigned int *nx, unsigned int *ny, double *rho, double *u, double *nu, const double *tau, const double *mi_ar){
+__host__ void wrapper_input(unsigned int *nx, unsigned int *ny, double *rho, double *u, double *nu, const double *mi_ar){
 	checkCudaErrors(cudaMemcpyToSymbol(Nx_d, nx, sizeof(unsigned int)));
 	checkCudaErrors(cudaMemcpyToSymbol(Ny_d, ny, sizeof(unsigned int)));
 	checkCudaErrors(cudaMemcpyToSymbol(rho0_d, rho, sizeof(double)));
 	checkCudaErrors(cudaMemcpyToSymbol(u_max_d, u, sizeof(double)));
 	checkCudaErrors(cudaMemcpyToSymbol(nu_d, nu, sizeof(double)));
-	checkCudaErrors(cudaMemcpyToSymbol(tau_d, tau, sizeof(double)));
 	checkCudaErrors(cudaMemcpyToSymbol(mi_ar_d, mi_ar, sizeof(double)));
+}
+
+__host__ void wrapper_analytical(double *d, double *delx, double *dely, double *delt, double *umax){
+	checkCudaErrors(cudaMemcpyToSymbol(D_d, d, sizeof(double)));
+	checkCudaErrors(cudaMemcpyToSymbol(delx_d, delx, sizeof(double)));
+	checkCudaErrors(cudaMemcpyToSymbol(dely_d, dely, sizeof(double)));
+	checkCudaErrors(cudaMemcpyToSymbol(delt_d, delt, sizeof(double)));
+	checkCudaErrors(cudaMemcpyToSymbol(umax_d, umax, sizeof(double)));
+}
+
+__host__ void wrapper_LBM(double *gx, double *gy, const double *tau){
+	checkCudaErrors(cudaMemcpyToSymbol(gx_d, gx, sizeof(double)));
+	checkCudaErrors(cudaMemcpyToSymbol(gy_d, gy, sizeof(double)));
+	checkCudaErrors(cudaMemcpyToSymbol(tau_d, tau, sizeof(double)));
 }
 
 __host__ void wrapper_lattice(unsigned int *ndir, double *a, double *w_0, double *w_p, double *w_s, double *w_t, double *w_q){
