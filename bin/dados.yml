@@ -1,5 +1,7 @@
 domain:
-  Nx: 1024
+  H: 1.0
+  D: 0.05
+  Nx: 64
   Ny: 64
 
 simulation:
@@ -11,16 +13,26 @@ simulation:
   erro_max: 1e-17
 
 gpu:
-  nThreads: 32
+  nThreads: 8
 
 input:
   Re: 1
-  u_max: 0.04
+  u_max: 0.09
+  u_max_si: 1.0
   rho0: 1.0
 
 output:
   plot_module: true
-  plot_profiles: true
+  plot_profiles: false
+
+boundary:
+  periodic: false
+  gx: 1e-3
+  gy: 0.0
+  inlet: VP
+  rhoin: 1.0
+  outlet: VP
+  rhoout: 0.8436
 
 air:
   rho: 1.21
