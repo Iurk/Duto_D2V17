@@ -6,6 +6,7 @@
 namespace myGlobals{
 
 	//Domain
+	extern double H, D;
 	extern unsigned int Nx, Ny;
 
 	//Simulation
@@ -17,9 +18,14 @@ namespace myGlobals{
 	extern unsigned int nThreads;
 
 	//Input
-	extern double u_max, rho0, Re;
+	extern double u_max, u_max_si, rho0, Re;
 	extern double nu;
 	extern const double tau;
+
+	//Boundary
+	extern bool periodic;
+	extern double gx, gy, rhoin, rhoout;
+	extern std::string inlet_bc, outlet_bc;
 
 	//Air
 	extern const double mi_ar;
@@ -34,6 +40,9 @@ namespace myGlobals{
 	extern const size_t mem_mesh;
 	extern const size_t mem_size_ndir;
 	extern const size_t mem_size_scalar;
+
+	// Deltas
+	extern double delx, dely, delt;
 
 	extern bool *walls, *inlet, *outlet;
 }
