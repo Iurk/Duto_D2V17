@@ -88,8 +88,8 @@ void solving(unsigned int NEQ, double *guess, double *solution, void *user_data,
 	if(check_flag(&flag, "KINSetLinearSolver", 1)) return;
 
 	N_VScale(1.0, u1, u);				// Setting scale to 1
-	glstr = KIN_NONE;					// Setting the method to solve the system
-	mset = 0;							// Setting the maximum number of nonlinear iterations without a call to the preconditioner or Jacobian setup function
+	glstr = KIN_LINESEARCH;					// Setting the method to solve the system
+	mset = 5;							// Setting the maximum number of nonlinear iterations without a call to the preconditioner or Jacobian setup function
 	SolveIt(kmem, u, s, glstr, mset); 	// Calling the solver
 
 	if(NEQ == 2){
