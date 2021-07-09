@@ -609,7 +609,7 @@ __host__ void outlet_VP(double ux_in, double *f_gpu){
 
 __host__ void host_VP(unsigned int NI, unsigned int *I, unsigned int *IN, double ux, double uy, double *f_gpu, std::string mode){
 
-	double solution[2];
+	double *solution;
 	double guess[2] = {0.0, 0.0};
 
 	double *f_pinned;
@@ -640,7 +640,12 @@ __host__ void host_VP(unsigned int NI, unsigned int *I, unsigned int *IN, double
 		ux = poiseulle_eval(x, y);
 		input-> ux = ux;
 
-		solving(2, guess, solution, input, func_velocity);
+		if(x == 0){
+			if(y == 0){
+				printf("Solving...\n");
+			}
+		}
+		//solving(2, guess, solution, input, func_velocity);
 
 		double rho = solution[0];
 		double tauxy = solution[1];
