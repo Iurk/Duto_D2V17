@@ -609,7 +609,7 @@ __host__ void outlet_VP(double ux_in, double *f_gpu){
 
 __host__ void host_VP(unsigned int NI, unsigned int *I, unsigned int *IN, double ux, double uy, double *f_gpu, std::string mode){
 
-	double *solution;
+	double solution[2];
 	double guess[2] = {0.0, 0.0};
 
 	double *f_pinned;
@@ -640,12 +640,7 @@ __host__ void host_VP(unsigned int NI, unsigned int *I, unsigned int *IN, double
 		ux = poiseulle_eval(x, y);
 		input-> ux = ux;
 
-		if(x == 0){
-			if(y == 0){
-				printf("Solving...\n");
-			}
-		}
-		//solving(2, guess, solution, input, func_velocity);
+		solving(2, guess, solution, input, func_velocity);
 
 		double rho = solution[0];
 		double tauxy = solution[1];
@@ -654,6 +649,7 @@ __host__ void host_VP(unsigned int NI, unsigned int *I, unsigned int *IN, double
 
 	checkCudaErrors(cudaMemcpy(f_gpu, f_pinned, mem_size_ndir, cudaMemcpyHostToDevice));
 	free(input);
+	checkCudaErrors(cudaFreeHost(f_pinned));
 }
 /*
 __host__ void host_inlet_PP(double rho_in, double *solution, double *f_gpu){
