@@ -25,15 +25,19 @@ typedef struct{
 	unsigned int x, y, NI;
 	unsigned int *I, *IN;
 	double *f;
-	double rho, uy;
+	double rho, ux, uy;
 }*InputData;
 
-__host__ int func(N_Vector, N_Vector, void*);
-__host__ void host_inlet_PP(double, double*, double*);
-__host__ double host_recursive_PP(unsigned int, unsigned int, unsigned int, double, double, double, double, double, double);
-__host__ void host_hermite_polynomial(int, int, double, double*);
-__host__ void host_hermite_moments(double, double, double, double, double, double, double*);
+__host__ int func_velocity(N_Vector, N_Vector, void*);
+__host__ void inlet_VP(double, double*);
+__host__ void host_VP(unsigned int, unsigned int*, unsigned int*, double, double, double*, std::string);
 __host__ void host_recursive(unsigned int, unsigned int, double, double, double, double, double, double, double*);
+__host__ double host_recursive_n(unsigned int, unsigned int, unsigned int, double, double, double, double, double, double);
+
+
+
+__host__ void host_inlet_PP(double, double*, double*);
+
 
 __global__ void gpu_inlet(double, double, double*, double*, double*, double*, double*, double*, double*, double*, double*, unsigned int);
 __global__ void gpu_bounce_back(double*);
@@ -119,71 +123,6 @@ __device__ void known_moments(unsigned int x, unsigned int y, unsigned int NI, u
 	*rhomxy = rhomxy_local;
 	*rhomxxx = rhomxxx_local;
 	*rhomxxy = rhomxxy_local;
-}
-
-__device__ void known_moments(unsigned int x, unsigned int y, unsigned int NI, unsigned int *I, double *f, double *a0, double *ay, double *axx, double *axy, double *ayy, double *axxx, double *axxy, double *axyy, double *ayyy){
-
-	double cs = 1.0/as_d;
-	double cs2 = cs*cs;
-
-	double a0_local = 0.0, ay_local = 0.0, axx_local = 0.0, axy_local = 0.0, ayy_local = 0.0, axxx_local = 0.0, axxy_local = 0.0, axyy_local = 0.0, ayyy_local = 0.0;
-	for(int n = 0; n < NI; ++n){
-		unsigned int ni = I[n];
-
-		double ex2 = ex_d[ni]*ex_d[ni];
-		double ey2 = ey_d[ni]*ey_d[ni];
-
-		a0_local += f[gpu_fieldn_index(x, y, ni)];
-		//ax_local += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni];
-		ay_local += f[gpu_fieldn_index(x, y, ni)]*ey_d[ni];
-		axx_local += f[gpu_fieldn_index(x, y, ni)]*(ex2 - cs2);
-		axy_local += f[gpu_fieldn_index(x, y, ni)]*ex_d[ni]*ey_d[ni];
-		ayy_local += f[gpu_fieldn_index(x, y, ni)]*(ey2 - cs2);
-		axxx_local += f[gpu_fieldn_index(x, y, ni)]*(ex2 - 3*cs2)*ex_d[ni];
-		axxy_local += f[gpu_fieldn_index(x, y, ni)]*(ex2 - cs2)*ey_d[ni];
-		axyy_local += f[gpu_fieldn_index(x, y, ni)]*(ey2 - cs2)*ex_d[ni];
-		ayyy_local += f[gpu_fieldn_index(x, y, ni)]*(ey2 - 3*cs2)*ey_d[ni];
-	}
-
-	*a0 = a0_local;
-	*ay = ay_local;
-	*axx = axx_local;
-	*axy = axy_local;
-	*ayy = ayy_local;
-	*axxx = axxx_local;
-	*axxy = axxy_local;
-	*axyy = axyy_local;
-	*ayyy = ayyy_local;
-}
-
-__device__ void att_moments(unsigned int x, unsigned int y, double *f, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
-
-	double cs = 1.0/as_d;
-	double cs2 = cs*cs;
-
-	double rho = 0, ux_i = 0, uy_i = 0, Pxx = 0, Pxy = 0, Pyy = 0;
-	for(int n = 0; n < q; ++n){
-		rho += f[gpu_fieldn_index(x, y, n)];
-		ux_i += f[gpu_fieldn_index(x, y, n)]*ex_d[n];
-		uy_i += f[gpu_fieldn_index(x, y, n)]*ey_d[n];
-		Pxx += f[gpu_fieldn_index(x, y, n)]*(ex_d[n]*ex_d[n] - cs2);
-		Pxy += f[gpu_fieldn_index(x, y, n)]*ex_d[n]*ey_d[n];
-		Pyy += f[gpu_fieldn_index(x, y, n)]*(ey_d[n]*ey_d[n] - cs2);
-	}
-
-	double ux = ux_i/rho;
-	double uy = uy_i/rho;
-	
-	double tauxx = Pxx - rho*ux*ux;
-	double tauxy = Pxy - rho*ux*uy;
-	double tauyy = Pyy - rho*uy*uy;
-
-	r[gpu_scalar_index(x, y)] = rho;
-	u[gpu_scalar_index(x, y)] = ux;
-	v[gpu_scalar_index(x, y)] = uy;
-	txx[gpu_scalar_index(x, y)] = tauxx;
-	txy[gpu_scalar_index(x, y)] = tauxy;
-	tyy[gpu_scalar_index(x, y)] = tauyy;
 }
 
 // Boundary Conditions
@@ -290,57 +229,9 @@ __device__ void device_inlet_VP(unsigned int x, unsigned int y, double ux_in, do
 	}
 }
 
-__device__ void device_inlet_PP(unsigned int x, unsigned int y, double rho_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
+__device__ void device__inlet_interpolation(unsigned int x, unsigned int y, double *f, double *feq){
 
-	double uy_in = 0.0;
-	double a0 = rho_in;
-
-	double ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy;
-
-	//double rhoI = 0, rhomxx = 0, rhomxy = 0, rhomxxx = 0, rhomxxy = 0;
-	//double *prhoI = &rhoI, *prhomxx = &rhomxx, *prhomxy = &rhomxy, *prhomxxx = &rhomxxx, *prhomxxy = &rhomxxy;
-
-	double rhoI = 0, rhoay = 0, rhoaxx = 0, rhoaxy = 0, rhoayy = 0, rhoaxxx = 0, rhoaxxy = 0, rhoaxyy = 0, rhoayyy = 0;
-	double *prhoI = &rhoI, *prhoay = &rhoay, *prhoaxx = &rhoaxx, *prhoaxy = &rhoaxy, *prhoayy = &rhoayy, *prhoaxxx = &rhoaxxx, *prhoaxxy = &rhoaxxy, *prhoaxyy = &rhoaxyy, *prhoayyy = &rhoayyy;
-
-	if(x == 0){
-		unsigned int NI = 11;
-		unsigned int I[11] = {0, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16};
-
-		//known_moments(x, y, NI, I, f, prhoI, prhomxx, prhomxy, prhomxxx, prhomxxy);
-		known_moments(x, y, NI, I, f, prhoI, prhoay, prhoaxx, prhoaxy, prhoayy, prhoaxxx, prhoaxxy, prhoaxyy, prhoayyy);
-
-		//rhoI = *prhoI, rhomxx = *prhomxx, rhomxy = *prhomxy, rhomxxx = *prhomxxx, rhomxxy = *prhomxxy;
-
-		rhoI = *prhoI, rhoay = *prhoay, rhoaxx = *prhoaxx, rhoaxy = *prhoaxy, rhoayy = *prhoayy, rhoaxxx = *prhoaxxx, rhoaxxy = *prhoaxxy, rhoaxyy = *prhoaxyy, rhoayyy = *prhoayyy;
-/*
-		double ux = (1.02853274853573*rho_in - 1.39116351908114*rhoI - 0.148004964936173*rhomxxx - 0.94084808101913*rhomxx)/rho_in;
-		double mxx = (0.740268695474152*rho_in - 0.750466883119502*rhoI + 0.384569467507977*rhomxxx + 1.12216193413231*rhomxx)/rho_in;
-		double mxy = (2.57129750702885*rhomxxy + 3.73177207142366*rhomxy)/rho_in;
-		double mxxx = (0.208023617035681*rho_in - 0.237543794896928*rhoI + 2.12172701123547*rhomxxx + 0.355195692599559*rhomxx)/rho_in;
-		double mxxy = (2.82710005410884*rhomxxy + 1.90405540527407*rhomxy)/rho_in;
-*/
-		ax = 1.02853001742339*a0 - 1.3911626571536*rhoI + 0.0352938882748483*rhoay - 0.940832698105446*rhoaxx + 0.0979476254787982*rhoaxy + 0.00355923867008645*rhoayy - 0.147972332198398*rhoaxxx + 0.0916956779614975*rhoaxxy + 0.002202787016436*rhoaxyy - 0.00120944005217295*rhoayyy;
-		ay = 23.5259268326181*rhoay + 62.4930443684678*rhoaxy + 58.438961358839*rhoaxxy - 0.800169075943611*rhoayyy;
-		axx = 0.740263417652105*a0 - 0.750465217461107*rhoI + 0.257673935132836*rhoay + 1.12219166131709*rhoaxx + 0.715096899992883*rhoaxy + 0.00687816026470532*rhoayy + 0.384632529646006*rhoaxxx + 0.669452625650493*rhoaxxy + 0.0160821271480331*rhoaxyy - 0.00882989074832976*rhoayyy;
-		axy = 23.1381663530851*rhoay + 65.1965244097511*rhoaxy + 60.0473921945547*rhoaxxy - 0.815217391304348*rhoayyy;
-		ayy =  - 0.000914945321896342*a0 + 0.000288752887648945*rhoI + 8.72863616235121*rhoay + 0.0051534038878491*rhoaxx + 24.2237176905198*rhoaxy + 1.19237452524743*rhoayy + 0.010932238272953*rhoaxxx + 22.6775300118014*rhoaxxy + 0.54477778871769*rhoaxyy - 0.299110205522918*rhoayyy;
-		axxx = 0.208013859147942*a0 - 0.237540715348681*rhoI + 0.158714460400339*rhoay + 0.355250653628826*rhoaxx + 0.440464490744149*rhoaxy + 0.0127166689443748*rhoayy + 2.12184360350744*rhoaxxx + 0.41234986452523*rhoaxxy + 0.00990579870282131*rhoaxyy - 0.0054387780618658*rhoayyy;
-		axxy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 42.6271193162634*rhoaxxy - 0.549049927727359*rhoayyy;
-		axyy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 41.6271193162634*rhoaxxy + 1.0*rhoaxyy - 0.549049927727359*rhoayyy;
-		ayyy = - 0.658154004267018*rhoay - 1.81101456693753*rhoaxy- 1.64714978318208*rhoaxxy + 1.04347826086957*rhoayyy;
-
-		//double m[10] = {1, ux, uy_in, mxx, mxy, 0, mxxx, mxxy, 0, 0};
-		double a[10] = {a0, ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy};
-
-		//gpu_recursive_inlet_pressure(x, y, rho_in, m, frec);
-		gpu_recursive_inlet_pressure(x, y, rho_in, a, frec);
-		for(int n = 0; n < q; ++n){
-			f[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
-		}
-	}
-
-	else if(x == 1){
+	if(x == 1){
 		f[gpu_fieldn_index(x, y, 9)] = f[gpu_fieldn_index(x, y, 11)] - feq[gpu_fieldn_index(x, y, 11)] + feq[gpu_fieldn_index(x, y, 9)];
 		f[gpu_fieldn_index(x, y, 12)] = f[gpu_fieldn_index(x, y, 10)] - feq[gpu_fieldn_index(x, y, 10)] + feq[gpu_fieldn_index(x, y, 12)];
 
@@ -360,38 +251,27 @@ __device__ void device_inlet_PP(unsigned int x, unsigned int y, double rho_in, d
 	}
 }
 
-__device__ void device_interpolation(unsigned int x, unsigned int y, double *f, double *feq){
+__device__ void device_outlet_interpolation(unsigned int x, unsigned int y, double *f, double *feq){
 
-	printf("x: %d, y: %d\n", x, y);
-	if(x == 0){
-		if(y == 5){
-			printf("f\n");
-			printf("f0: %g f1: %g f2: %g\n", f[gpu_fieldn_index(x, y, 0)], f[gpu_fieldn_index(x, y, 1)], f[gpu_fieldn_index(x, y, 2)]);
-			printf("f3: %g f4: %g f5: %g\n", f[gpu_fieldn_index(x, y, 3)], f[gpu_fieldn_index(x, y, 4)], f[gpu_fieldn_index(x, y, 5)]);
-			printf("f6: %g f7: %g f8: %g\n", f[gpu_fieldn_index(x, y, 6)], f[gpu_fieldn_index(x, y, 7)], f[gpu_fieldn_index(x, y, 8)]);
-			printf("f9: %g f10: %g f11: %g\n", f[gpu_fieldn_index(x, y, 9)], f[gpu_fieldn_index(x, y, 10)], f[gpu_fieldn_index(x, y, 11)]);
-			printf("f12: %g f13: %g f14: %g\n", f[gpu_fieldn_index(x, y, 12)], f[gpu_fieldn_index(x, y, 13)], f[gpu_fieldn_index(x, y, 14)]);
-			printf("f15: %g f16: %g\n", f[gpu_fieldn_index(x, y, 15)], f[gpu_fieldn_index(x, y, 16)]);
-		}
-	}
-	if(x == 1){
-		f[gpu_fieldn_index(x, y, 9)] = f[gpu_fieldn_index(x, y, 11)] - feq[gpu_fieldn_index(x, y, 11)] + feq[gpu_fieldn_index(x, y, 9)];
-		f[gpu_fieldn_index(x, y, 12)] = f[gpu_fieldn_index(x, y, 10)] - feq[gpu_fieldn_index(x, y, 10)] + feq[gpu_fieldn_index(x, y, 12)];
+	if(x == Nx_d-2){
+		f[gpu_fieldn_index(x, y, 10)] = f[gpu_fieldn_index(x, y, 12)] - feq[gpu_fieldn_index(x, y, 12)] + feq[gpu_fieldn_index(x, y, 10)];
+		f[gpu_fieldn_index(x, y, 11)] = f[gpu_fieldn_index(x, y, 9)] - feq[gpu_fieldn_index(x, y, 9)] + feq[gpu_fieldn_index(x, y, 11)];
 
 		if(y > 0 && y < Ny_d-2){
-			f[gpu_fieldn_index(x, y, 9)] = (1.0/3.0)*f[gpu_fieldn_index(x-1, y-1, 9)] + f[gpu_fieldn_index(x+1, y+1, 9)] - (1.0/3.0)*f[gpu_fieldn_index(x+2, y+2, 9)];
+			f[gpu_fieldn_index(x, y, 10)] = (1.0/3.0)*f[gpu_fieldn_index(x+1, y-1, 10)] + f[gpu_fieldn_index(x-1, y+1, 10)] - (1.0/3.0)*f[gpu_fieldn_index(x-2, y+2, 10)];
 		}
 
 		if(y > 1 && y < Ny_d-1){
-			f[gpu_fieldn_index(x, y, 12)] = (1.0/3.0)*f[gpu_fieldn_index(x-1, y+1, 12)] + f[gpu_fieldn_index(x+1, y-1, 12)] - (1.0/3.0)*f[gpu_fieldn_index(x+2, y-2, 12)];
+			f[gpu_fieldn_index(x, y, 11)] = (1.0/3.0)*f[gpu_fieldn_index(x+1, y+1, 11)] + f[gpu_fieldn_index(x-1, y-1, 11)] - (1.0/3.0)*f[gpu_fieldn_index(x-2, y-2, 11)];
 		}
 		
-		f[gpu_fieldn_index(x, y, 13)] = (1.0/2.0)*f[gpu_fieldn_index(x-1, y, 13)] + f[gpu_fieldn_index(x+2, y, 13)] - (1.0/2.0)*f[gpu_fieldn_index(x+3, y, 13)];
+		f[gpu_fieldn_index(x, y, 15)] = (1.0/2.0)*f[gpu_fieldn_index(x+1, y, 15)] + f[gpu_fieldn_index(x-2, y, 15)] - (1.0/2.0)*f[gpu_fieldn_index(x-3, y, 15)];
 	}
 
-	else if(x == 2){
-		f[gpu_fieldn_index(x, y, 13)] = (1.0/6.0)*f[gpu_fieldn_index(x-2, y, 13)] + (4.0/3.0)*f[gpu_fieldn_index(x+1, y, 13)] - (1.0/2.0)*f[gpu_fieldn_index(x+2, y, 13)];
+	else if(x == Nx_d-3){
+		f[gpu_fieldn_index(x, y, 15)] = (1.0/6.0)*f[gpu_fieldn_index(x+2, y, 15)] + (4.0/3.0)*f[gpu_fieldn_index(x-1, y, 15)] - (1.0/2.0)*f[gpu_fieldn_index(x-2, y, 15)];
 	}
+
 }
 
 __device__ void device_outlet_VP(unsigned int x, unsigned int y, double ux_out, double *f, double *feq, double *frec, double *r, double *u, double *v, double*txx, double *txy, double *tyy){
@@ -429,78 +309,6 @@ __device__ void device_outlet_VP(unsigned int x, unsigned int y, double ux_out, 
 		tyy[gpu_scalar_index(x, y)] = tauyy;
 
 		recursive_dist(x, y, rho, ux_out, uy_out, tauxx, tauxy, tauyy, frec);
-		for(int n = 0; n < q; ++n){
-			f[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
-		}
-	}
-
-	else if(x == Nx_d-2){
-		f[gpu_fieldn_index(x, y, 10)] = f[gpu_fieldn_index(x, y, 12)] - feq[gpu_fieldn_index(x, y, 12)] + feq[gpu_fieldn_index(x, y, 10)];
-		f[gpu_fieldn_index(x, y, 11)] = f[gpu_fieldn_index(x, y, 9)] - feq[gpu_fieldn_index(x, y, 9)] + feq[gpu_fieldn_index(x, y, 11)];
-
-		if(y > 0 && y < Ny_d-2){
-			f[gpu_fieldn_index(x, y, 10)] = (1.0/3.0)*f[gpu_fieldn_index(x+1, y-1, 10)] + f[gpu_fieldn_index(x-1, y+1, 10)] - (1.0/3.0)*f[gpu_fieldn_index(x-2, y+2, 10)];
-		}
-
-		if(y > 1 && y < Ny_d-1){
-			f[gpu_fieldn_index(x, y, 11)] = (1.0/3.0)*f[gpu_fieldn_index(x+1, y+1, 11)] + f[gpu_fieldn_index(x-1, y-1, 11)] - (1.0/3.0)*f[gpu_fieldn_index(x-2, y-2, 11)];
-		}
-		
-		f[gpu_fieldn_index(x, y, 15)] = (1.0/2.0)*f[gpu_fieldn_index(x+1, y, 15)] + f[gpu_fieldn_index(x-2, y, 15)] - (1.0/2.0)*f[gpu_fieldn_index(x-3, y, 15)];
-	}
-
-	else if(x == Nx_d-3){
-		f[gpu_fieldn_index(x, y, 15)] = (1.0/6.0)*f[gpu_fieldn_index(x+2, y, 15)] + (4.0/3.0)*f[gpu_fieldn_index(x-1, y, 15)] - (1.0/2.0)*f[gpu_fieldn_index(x-2, y, 15)];
-	}
-}
-
-__device__ void device_outlet_PP(unsigned int x, unsigned int y, double rho_out, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
-
-	double uy_out = 0.0;
-	double a0 = rho_out;
-
-	double ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy;
-
-	//double rhoI = 0, rhomxx = 0, rhomxy = 0, rhomxxx = 0, rhomxxy = 0;
-	//double *prhoI = &rhoI, *prhomxx = &rhomxx, *prhomxy = &rhomxy, *prhomxxx = &rhomxxx, *prhomxxy = &rhomxxy;
-
-	double rhoI = 0, rhoay = 0, rhoaxx = 0, rhoaxy = 0, rhoayy = 0, rhoaxxx = 0, rhoaxxy = 0, rhoaxyy = 0, rhoayyy = 0;
-	double *prhoI = &rhoI, *prhoay = &rhoay, *prhoaxx = &rhoaxx, *prhoaxy = &rhoaxy, *prhoayy = &rhoayy, *prhoaxxx = &rhoaxxx, *prhoaxxy = &rhoaxxy, *prhoaxyy = &rhoaxyy, *prhoayyy = &rhoayyy;
-
-	if(x == Nx_d-1){
-		unsigned int NI = 11;
-		unsigned int I[11] = {0, 1, 2, 4, 5, 8, 9, 12, 13, 14, 16};
-
-		//known_moments(x, y, NI, I, f, prhoI, prhomxx, prhomxy, prhomxxx, prhomxxy);
-		known_moments(x, y, NI, I, f, prhoI, prhoay, prhoaxx, prhoaxy, prhoayy, prhoaxxx, prhoaxxy, prhoaxyy, prhoayyy);
-
-		//rhoI = *prhoI, rhomxx = *prhomxx, rhomxy = *prhomxy, rhomxxx = *prhomxxx, rhomxxy = *prhomxxy;
-		rhoI = *prhoI, rhoay = *prhoay, rhoaxx = *prhoaxx, rhoaxy = *prhoaxy, rhoayy = *prhoayy, rhoaxxx = *prhoaxxx, rhoaxxy = *prhoaxxy, rhoaxyy = *prhoaxyy, rhoayyy = *prhoayyy;
-/*
-		double ux = (-1.02853274853573*rho_out + 1.39116351908114*rhoI - 0.148004964936173*rhomxxx + 0.94084808101913*rhomxx)/rho_out;
-		double mxx = (0.740268695474152*rho_out - 0.750466883119502*rhoI - 0.384569467507977*rhomxxx + 1.12216193413231*rhomxx)/rho_out;
-		double mxy = (-2.57129750702885*rhomxxy + 3.73177207142366*rhomxy)/rho_out;
-		double mxxx = (-0.208023617035681*rho_out + 0.237543794896928*rhoI + 2.12172701123547*rhomxxx - 0.355195692599559*rhomxx)/rho_out;
-		double mxxy = (2.82710005410884*rhomxxy - 1.90405540527407*rhomxy)/rho_out;
-*/
-
-		
-
-		ax = 1.02853001742339*a0 - 1.3911626571536*rhoI + 0.0352938882748483*rhoay - 0.940832698105446*rhoaxx + 0.0979476254787982*rhoaxy + 0.00355923867008645*rhoayy - 0.147972332198398*rhoaxxx + 0.0916956779614975*rhoaxxy + 0.002202787016436*rhoaxyy - 0.00120944005217295*rhoayyy;
-		ay = 23.5259268326181*rhoay + 62.4930443684678*rhoaxy + 58.438961358839*rhoaxxy - 0.800169075943611*rhoayyy;
-		axx = 0.740263417652105*a0 - 0.750465217461107*rhoI + 0.257673935132836*rhoay + 1.12219166131709*rhoaxx + 0.715096899992883*rhoaxy + 0.00687816026470532*rhoayy + 0.384632529646006*rhoaxxx + 0.669452625650493*rhoaxxy + 0.0160821271480331*rhoaxyy - 0.00882989074832976*rhoayyy;
-		axy = 23.1381663530851*rhoay + 65.1965244097511*rhoaxy + 60.0473921945547*rhoaxxy - 0.815217391304348*rhoayyy;
-		ayy = - 0.000914945321896342*a0 + 0.000288752887648945*rhoI + 8.72863616235121*rhoay + 0.0051534038878491*rhoaxx + 24.2237176905198*rhoaxy + 1.19237452524743*rhoayy + 0.010932238272953*rhoaxxx + 22.6775300118014*rhoaxxy + 0.54477778871769*rhoaxyy - 0.299110205522918*rhoayyy;
-		axxx = 0.208013859147942*a0 - 0.237540715348681*rhoI + 0.158714460400339*rhoay + 0.355250653628826*rhoaxx + 0.440464490744149*rhoaxy + 0.0127166689443748*rhoayy + 2.12184360350744*rhoaxxx + 0.41234986452523*rhoaxxy + 0.00990579870282131*rhoaxyy - 0.0054387780618658*rhoayyy;
-		axxy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 42.6271193162634*rhoaxxy - 0.549049927727359*rhoayyy;
-		axyy = 16.0223789279238*rhoay + 44.4653181392327*rhoaxy + 41.6271193162634*rhoaxxy + 1.0*rhoaxyy - 0.549049927727359*rhoayyy;
-		ayyy = - 0.658154004267018*rhoay - 1.81101456693753*rhoaxy - 1.64714978318208*rhoaxxy + 1.04347826086957*rhoayyy;
-
-		//double m[10] = {1, ux, uy_out, mxx, mxy, 0, mxxx, mxxy, 0, 0};
-		double a[10] = {a0, ax, ay, axx, axy, ayy, axxx, axxy, axyy, ayyy};
-
-		//gpu_recursive_inlet_pressure(x, y, rho_out, m, frec);
-		gpu_recursive_inlet_pressure(x, y, rho_out, a, frec);
 		for(int n = 0; n < q; ++n){
 			f[gpu_fieldn_index(x, y, n)] = frec[gpu_fieldn_index(x, y, n)];
 		}
@@ -756,7 +564,7 @@ __global__ void gpu_bounce_back(double *f){
 	}
 }
 
-__host__ void inlet_BC(double *solution, double rho_in, double ux_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy, std::string mode){
+__host__ void inlet_BC(double rho_in, double ux_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy, std::string mode){
 
 	dim3 grid(Nx/nThreads, Ny, 1);
 	dim3 block(nThreads, 1, 1);
@@ -764,18 +572,85 @@ __host__ void inlet_BC(double *solution, double rho_in, double ux_in, double *f,
 	unsigned int mode_num;
 	if(mode == "VP"){
 		mode_num = 1;
+		inlet_VP(ux_in, f);
 	}
 	else if(mode == "PP"){
 		mode_num = 2;
-		host_inlet_PP(rho_in, solution, f);
+		//host_inlet_PP(rho_in, solution, f);
 	}
 
-	printf("Hi before calling the kernel\n");
-	printf("mode_num: %d\n", mode_num);
+	//printf("Hi before calling the kernel\n");
+	//printf("mode_num: %d\n", mode_num);
 	gpu_inlet<<< grid, block >>>(rho_in, ux_in, f, feq, frec, r, u, v, txx, txy, tyy, mode_num);
 	getLastCudaError("gpu_inlet kernel error");
 }
 
+__host__ void inlet_VP(double ux_in, double *f_gpu){
+
+	double uy_in = 0.0;
+
+	unsigned int NI = 11;
+	unsigned int I[11] = {0, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16};
+	unsigned int IN[6] = {1, 5, 8, 9, 12, 13};
+
+	host_VP(NI, I, IN, ux_in, uy_in, f_gpu, "inlet");
+}
+
+__host__ void outlet_VP(double ux_in, double *f_gpu){
+
+	double uy_in = 0.0;
+
+	unsigned int NI = 11;
+	unsigned int I[11] = {0, 1, 2, 4, 5, 8, 9, 12, 13, 14, 16};
+	unsigned int IN[6] = {3, 6, 7, 10, 11, 15};
+
+	host_VP(NI, I, IN, ux_in, uy_in, f_gpu, "outlet");
+}
+
+__host__ void host_VP(unsigned int NI, unsigned int *I, unsigned int *IN, double ux, double uy, double *f_gpu, std::string mode){
+
+	double solution[2];
+	double guess[2] = {0.0, 0.0};
+
+	double *f_pinned;
+	checkCudaErrors(cudaMallocHost((void**)&f_pinned, mem_size_ndir));
+	checkCudaErrors(cudaMemcpy(f_pinned, f_gpu, mem_size_ndir, cudaMemcpyDeviceToHost));
+
+	InputData input = NULL;
+	input = (InputData)malloc(sizeof *input);
+	input->NI = NI;
+	input->I = I;
+	input->IN = IN;
+	input->f = f_pinned;
+	input->uy = uy;
+
+	unsigned int x;
+	if(mode == "inlet"){
+		x = 0;
+		input->x = x;
+	}
+	else if(mode == "outlet"){
+		x = Nx-1;
+		input->x = x;
+	}
+
+	for(unsigned int y = 0; y < Ny; ++y){
+		input->y = y;
+
+		ux = poiseulle_eval(x, y);
+		input-> ux = ux;
+
+		solving(2, guess, solution, input, func_velocity);
+
+		double rho = solution[0];
+		double tauxy = solution[1];
+		host_recursive(x, y, rho, ux, uy, 0.0, tauxy, 0.0, f_pinned);
+	}
+
+	checkCudaErrors(cudaMemcpy(f_gpu, f_pinned, mem_size_ndir, cudaMemcpyHostToDevice));
+	free(input);
+}
+/*
 __host__ void host_inlet_PP(double rho_in, double *solution, double *f_gpu){
 
 	double uy_in = 0.0;
@@ -826,27 +701,23 @@ __host__ void host_inlet_PP(double rho_in, double *solution, double *f_gpu){
 	checkCudaErrors(cudaMemcpy(f_gpu, f_pinned, mem_size_ndir, cudaMemcpyHostToDevice));
 	printf("Copied\n");
 }
-
+*/
 __global__ void gpu_inlet(double rho_in, double ux_in, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy, unsigned int mode_num){
 
 	unsigned int y = blockIdx.y;
 	unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
 
-	printf("Hi from inside the kernel\n");
-
 	bool node_inlet = inlet_d[gpu_scalar_index(x, y)];
 	if(node_inlet){
 		if(mode_num == 1){
-			device_inlet_VP(x, y, ux_in, f, feq, frec, r, u, v, txx, txy, tyy);
+			//device_inlet_VP(x, y, ux_in, f, feq, frec, r, u, v, txx, txy, tyy);
+			device__inlet_interpolation(x, y, f, feq);
 		}
 		else if(mode_num == 2){
 			//device_inlet_PP(x, y, rho_in, f, feq, frec, r, u, v, txx, txy, tyy);
-			device_interpolation(x, y, f, feq);
+			//device_interpolation(x, y, f, feq);
 		}
 	}
-
-	__syncthreads();
-	att_moments(x, y, f, r, u, v, txx, txy, tyy);
 }
 
 __host__ void outlet_BC(double rho_out, double ux_out, double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy, std::string mode){
@@ -863,6 +734,7 @@ __host__ void outlet_BC(double rho_out, double ux_out, double *f, double *feq, d
 	}
 	else if(mode == "VP"){
 		mode_num = 3;
+		outlet_VP(ux_out, f);
 	}
 	else if(mode == "PP"){
 		mode_num = 4;
@@ -886,15 +758,13 @@ __global__ void gpu_outlet(double rho_out, double ux_out, double *f, double *feq
 			device_outlet_FDP(x, y, rho_out, f);
 		}
 		else if(mode_num == 3){
-			device_outlet_VP(x, y, ux_out, f, feq, frec, r, u, v, txx, txy, tyy);
+			//device_outlet_VP(x, y, ux_out, f, feq, frec, r, u, v, txx, txy, tyy);
+			device_outlet_interpolation(x, y, f, feq);
 		}
 		else if(mode_num == 4){
-			device_outlet_PP(x, y, rho_out, f, feq, frec, r, u, v, txx, txy, tyy);
+			//device_outlet_PP(x, y, rho_out, f, feq, frec, r, u, v, txx, txy, tyy);
 		}
 	}
-
-	__syncthreads();
-	att_moments(x, y, f, r, u, v, txx, txy, tyy);
 }
 
 __host__ void wall_velocity(double *f, double *feq, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
@@ -915,9 +785,6 @@ __global__ void gpu_wall_velocity(double *f, double *feq, double *frec, double *
 	if(node_wall){
 		device_wall_velocity(x, y, f, feq, frec, r, u, v, txx, txy, tyy);
 	}
-
-	__syncthreads();
-	att_moments(x, y, f, r, u, v, txx, txy, tyy);
 }
 
 __host__ void corners(double *f, double *frec, double *r, double *u, double *v, double *txx, double *txy, double *tyy){
@@ -942,8 +809,6 @@ __global__ void gpu_corners(double *f, double *frec, double *r, double *u, doubl
 	__syncthreads();
 	device_corners_others(x, y, f);
 
-	att_moments(x, y, f, r, u, v, txx, txy, tyy);
-
 	// Northwest
 	NI = 7;
 	I[0] = 0, I[1] = 2, I[2] = 3, I[3] = 6, I[4] = 10, I[5] = 14, I[6] = 15;
@@ -953,8 +818,6 @@ __global__ void gpu_corners(double *f, double *frec, double *r, double *u, doubl
 	device_corners_first(x, y, NI, I, f, frec);
 	__syncthreads();
 	device_corners_others(x, y, f);
-
-	att_moments(x, y, f, r, u, v, txx, txy, tyy);
 
 	// Southeast
 	NI = 7;
@@ -966,8 +829,6 @@ __global__ void gpu_corners(double *f, double *frec, double *r, double *u, doubl
 	__syncthreads();
 	device_corners_others(x, y, f);
 
-	att_moments(x, y, f, r, u, v, txx, txy, tyy);
-
 	// Northeast
 	NI = 7;
 	I[0] = 0, I[1] = 1, I[2] = 2, I[3] = 5, I[4] = 9, I[5] = 13, I[6] = 14;
@@ -977,12 +838,62 @@ __global__ void gpu_corners(double *f, double *frec, double *r, double *u, doubl
 	device_corners_first(x, y, NI, I, f, frec);
 	__syncthreads();
 	device_corners_others(x, y, f);
-
-	att_moments(x, y, f, r, u, v, txx, txy, tyy);
-
 }
 
-__host__ int func(N_Vector u, N_Vector f, void *user_data){
+__host__ int func_velocity(N_Vector u, N_Vector f, void *user_data){
+
+	realtype *udata, *fdata;
+	realtype rho, ux, uy, tauxx, tauxy, tauyy;
+
+	unsigned int x, y, NI;
+	unsigned int *I, *IN;
+	double *frec;
+
+	InputData input = (InputData)user_data;
+
+	x = input->x;
+	y = input->y;
+	NI = input->NI;
+	I = input->I;
+	IN = input->IN;
+	frec = input->f;
+	ux = input->ux;
+	uy = input->uy;
+
+	udata = N_VGetArrayPointer(u);
+	fdata = N_VGetArrayPointer(f);
+
+	rho = udata[0];
+	tauxx = 0.0;
+	tauxy = udata[1];
+	tauyy = 0.0;
+
+	double cs = 1.0/as;
+	double cs2 = cs*cs;
+
+	double rhoI = 0.0, rhoImxy = 0.0;
+	for(int n = 0; n < NI; ++n){
+		unsigned int ni = I[n];
+
+		rhoI += frec[gpu_fieldn_index(x, y, ni)];
+		rhoImxy += frec[gpu_fieldn_index(x, y, ni)]*ex[ni]*ey[ni];
+	}
+
+	double rhoIN = 0.0, rhoINmxy = 0.0;
+	for(int n = 0; n < ndir-NI; ++n){
+		unsigned int ni = IN[n];
+
+		rhoIN += host_recursive_n(ni, x, y, rho, ux, uy, tauxx, tauxy, tauyy);
+		rhoINmxy += host_recursive_n(ni, x, y, rho, ux, uy, tauxx, tauxy, tauyy)*ex[ni]*ey[ni];
+	}
+
+	fdata[0] = rhoI + rhoIN - rho;
+	fdata[1] = rhoImxy + rhoINmxy - rho*ux*uy + tauxy;
+
+	return (0);
+}
+
+__host__ int func_pressure(N_Vector u, N_Vector f, void *user_data){
 
 	realtype *udata, *fdata;
 	realtype ux, tauxx, tauxy, tauyy;
@@ -1034,10 +945,10 @@ __host__ int func(N_Vector u, N_Vector f, void *user_data){
 		double ex2 = ex[ni]*ex[ni];
 		double ey2 = ey[ni]*ey[ni];
 
-		rhoINax += host_recursive_PP(ni, x, y, rho, ux, uy, tauxx, tauxy, tauyy)*ex[ni];
-		rhoINaxx += host_recursive_PP(ni, x, y, rho, ux, uy, tauxx, tauxy, tauyy)*(ex2 - cs2);
-		rhoINaxy += host_recursive_PP(ni, x, y, rho, ux, uy, tauxx, tauxy, tauyy)*ex[ni]*ey[ni];
-		rhoINayy += host_recursive_PP(ni, x, y, rho, ux, uy, tauxx, tauxy, tauyy)*(ey2 - cs2);
+		rhoINax += host_recursive_n(ni, x, y, rho, ux, uy, tauxx, tauxy, tauyy)*ex[ni];
+		rhoINaxx += host_recursive_n(ni, x, y, rho, ux, uy, tauxx, tauxy, tauyy)*(ex2 - cs2);
+		rhoINaxy += host_recursive_n(ni, x, y, rho, ux, uy, tauxx, tauxy, tauyy)*ex[ni]*ey[ni];
+		rhoINayy += host_recursive_n(ni, x, y, rho, ux, uy, tauxx, tauxy, tauyy)*(ey2 - cs2);
 	}
 
 	fdata[0] = rhoIax + rhoINax - rho*ux;
@@ -1048,7 +959,7 @@ __host__ int func(N_Vector u, N_Vector f, void *user_data){
 	return (0);
 }
 
-__host__ double host_recursive_PP(unsigned int n, unsigned int x, unsigned int y, double rho, double ux, double uy, double tauxx, double tauxy, double tauyy){
+__host__ double host_recursive_n(unsigned int n, unsigned int x, unsigned int y, double rho, double ux, double uy, double tauxx, double tauxy, double tauyy){
 
 	double frec;
 
