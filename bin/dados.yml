@@ -6,19 +6,19 @@ domain:
 
 simulation:
   lattice: D2V17
-  NSTEPS: 4000
+  NSTEPS: 500000
   NSAVE: 2000
   NMSG: 1000
   meshprint: false
   erro_max: 1e-17
 
 gpu:
-  nThreads: 8
+  nThreads: 32
 
 input:
   Re: 1
   u_max: 0.09
-  u_max_si: 1.0
+  u_max_si: 0.5
   rho0: 1.0
 
 output:
